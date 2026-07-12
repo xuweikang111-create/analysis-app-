@@ -1,1 +1,1184 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0a0f1a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>足彩每日智能分析 - API联网版</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  :root {
+    --bg: #070b14;
+    --surface: #0f1525;
+    --surface2: #1a2235;
+    --surface3: #232d42;
+    --border: #1e2a40;
+    --border2: #2a3a55;
+    --text: #e8ecf1;
+    --text2: #9aa5b8;
+    --text3: #5d6b82;
+    --accent: #00d4ff;
+    --accent2: #0099cc;
+    --danger: #ff4757;
+    --success: #2ed573;
+    --warning: #ffa502;
+    --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif;
+  }
+  body {
+    font-family: var(--font);
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .header {
+    background: linear-gradient(180deg, var(--surface) 0%, var(--bg) 100%);
+    padding: 18px 16px 14px;
+    text-align: center;
+    border-bottom: 1px solid var(--border);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    backdrop-filter: blur(20px);
+  }
+  .header h1 {
+    font-size: 20px;
+    font-weight: 900;
+    letter-spacing: 2px;
+    background: linear-gradient(90deg, var(--text), var(--accent));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .header p { font-size: 11px; color: var(--text3); margin-top: 3px; }
+  .api-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 8px;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .api-status.online {
+    background: rgba(46,213,115,0.1);
+    color: var(--success);
+    border: 1px solid rgba(46,213,115,0.2);
+  }
+  .api-status.offline {
+    background: rgba(255,71,87,0.1);
+    color: var(--danger);
+    border: 1px solid rgba(255,71,87,0.2);
+  }
+  .api-status.local {
+    background: rgba(255,165,2,0.1);
+    color: var(--warning);
+    border: 1px solid rgba(255,165,2,0.2);
+  }
+  .status-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    animation: pulse 1.5s ease-in-out infinite;
+  }
+  .api-status.online .status-dot { background: var(--success); }
+  .api-status.offline .status-dot { background: var(--danger); animation: none; }
+  .api-status.local .status-dot { background: var(--warning); animation: none; }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.5; transform: scale(0.8); }
+  }
+
+  .container { max-width: 500px; margin: 0 auto; padding: 10px 12px 30px; }
+
+  .top-bar {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 10px;
+    align-items: center;
+  }
+  .top-bar .form-select {
+    flex: 1;
+    padding: 10px 12px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    background: var(--surface2);
+    color: var(--text);
+    font-size: 14px;
+    outline: none;
+    appearance: none;
+    font-family: var(--font);
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%235d6b82' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+    padding-right: 30px;
+  }
+  .date-tabs {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 12px;
+  }
+  .date-tab {
+    flex: 1;
+    padding: 8px 0;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    background: var(--surface2);
+    color: var(--text3);
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    text-align: center;
+    transition: all 0.2s;
+  }
+  .date-tab.active {
+    background: var(--accent);
+    color: #000;
+    border-color: var(--accent);
+  }
+
+  .analyze-all-btn {
+    width: 100%;
+    padding: 14px;
+    border-radius: 12px;
+    border: none;
+    background: linear-gradient(135deg, var(--accent) 0%, var(--accent2) 100%);
+    color: #000;
+    font-size: 16px;
+    font-weight: 900;
+    cursor: pointer;
+    margin-bottom: 12px;
+    box-shadow: 0 4px 20px rgba(0,212,255,0.25);
+    font-family: var(--font);
+    letter-spacing: 1px;
+  }
+  .analyze-all-btn:active { transform: scale(0.98); }
+  .analyze-all-btn:disabled { opacity: 0.5; }
+
+  .match-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 14px;
+    margin-bottom: 10px;
+    animation: fadeInUp 0.4s ease;
+  }
+  @keyframes fadeInUp { from { opacity:0; transform: translateY(15px); } to { opacity:1; transform: translateY(0); } }
+
+  .match-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--border);
+  }
+  .match-teams {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 1;
+  }
+  .match-teams .team-name {
+    font-size: 15px;
+    font-weight: 800;
+    color: var(--text);
+  }
+  .match-teams .vs {
+    font-size: 11px;
+    color: var(--text3);
+    font-weight: 700;
+    padding: 2px 8px;
+    background: var(--surface2);
+    border-radius: 6px;
+  }
+  .match-time {
+    font-size: 11px;
+    color: var(--accent);
+    font-weight: 700;
+    background: rgba(0,212,255,0.1);
+    padding: 3px 10px;
+    border-radius: 10px;
+  }
+  .data-source {
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    margin-left: 6px;
+    font-weight: 600;
+  }
+  .data-source.api { background: rgba(0,212,255,0.1); color: var(--accent); }
+  .data-source.local { background: rgba(255,165,2,0.1); color: var(--warning); }
+
+  .pred-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+  .pred-cell {
+    background: var(--surface2);
+    border-radius: 10px;
+    padding: 10px 6px;
+    text-align: center;
+    border: 1px solid var(--border);
+  }
+  .pred-cell .label {
+    font-size: 10px;
+    color: var(--text3);
+    margin-bottom: 4px;
+    font-weight: 600;
+  }
+  .pred-cell .value {
+    font-size: 16px;
+    font-weight: 900;
+    color: var(--text);
+  }
+  .pred-cell .value.small { font-size: 14px; }
+  .pred-cell .conf {
+    font-size: 10px;
+    margin-top: 3px;
+    font-weight: 700;
+  }
+  .conf.high { color: var(--success); }
+  .conf.medium { color: var(--warning); }
+  .conf.low { color: var(--danger); }
+
+  .score-row {
+    display: flex;
+    gap: 6px;
+    justify-content: center;
+    margin-bottom: 8px;
+  }
+  .score-tag {
+    background: linear-gradient(135deg, rgba(0,212,255,0.15), rgba(0,212,255,0.05));
+    color: var(--accent);
+    padding: 5px 12px;
+    border-radius: 16px;
+    font-size: 15px;
+    font-weight: 900;
+    border: 1px solid rgba(0,212,255,0.25);
+  }
+
+  .detail-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 6px;
+  }
+  .detail-cell {
+    background: var(--surface2);
+    border-radius: 8px;
+    padding: 8px;
+    text-align: center;
+  }
+  .detail-cell .d-label { font-size: 10px; color: var(--text3); margin-bottom: 2px; }
+  .detail-cell .d-value { font-size: 13px; font-weight: 800; color: var(--text); }
+
+  .expand-btn {
+    width: 100%;
+    padding: 8px;
+    margin-top: 10px;
+    border-radius: 8px;
+    border: 1px dashed var(--border2);
+    background: transparent;
+    color: var(--text3);
+    font-size: 12px;
+    cursor: pointer;
+    font-family: var(--font);
+  }
+  .expand-btn:active { color: var(--accent); border-color: var(--accent); }
+
+  .expanded-info {
+    display: none;
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid var(--border);
+  }
+  .expanded-info.active { display: block; }
+
+  .team-mini-stats {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+  .mini-stat {
+    background: var(--surface2);
+    border-radius: 8px;
+    padding: 8px;
+    font-size: 11px;
+  }
+  .mini-stat .ms-name { font-weight: 700; color: var(--text); margin-bottom: 4px; }
+  .mini-stat .ms-row { display: flex; justify-content: space-between; color: var(--text2); }
+
+  .form-dots { display: flex; gap: 3px; margin-top: 4px; }
+  .form-dot { width: 18px; height: 18px; border-radius: 4px; font-size: 9px; font-weight: 900; display: flex; align-items: center; justify-content: center; }
+  .form-dot.W { background: rgba(46,213,115,0.2); color: var(--success); }
+  .form-dot.D { background: rgba(255,165,2,0.2); color: var(--warning); }
+  .form-dot.L { background: rgba(255,71,87,0.2); color: var(--danger); }
+
+  .loading {
+    display: none;
+    text-align: center;
+    padding: 40px;
+    color: var(--text2);
+  }
+  .loading.active { display: block; }
+  .spinner {
+    width: 40px; height: 40px;
+    border: 3px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    margin: 0 auto 12px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .empty-state {
+    text-align: center;
+    padding: 40px 20px;
+    color: var(--text3);
+  }
+  .empty-state .icon { font-size: 40px; margin-bottom: 10px; }
+  .empty-state p { font-size: 14px; }
+
+  .toast {
+    position: fixed;
+    bottom: 30px;
+    left: 50%;
+    transform: translateX(-50%) translateY(100px);
+    background: var(--surface2);
+    color: var(--text);
+    padding: 12px 24px;
+    border-radius: 12px;
+    font-size: 14px;
+    border: 1px solid var(--border);
+    z-index: 1000;
+    transition: transform 0.3s ease;
+    white-space: nowrap;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+  }
+  .toast.show { transform: translateX(-50%) translateY(0); }
+
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+</style>
+
+<style>
+  /* Android 16 Edge-to-Edge 安全区域适配 */
+  body {
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+  }
+  .header {
+    padding-top: max(18px, env(safe-area-inset-top)) !important;
+  }
+  .container {
+    padding-bottom: max(30px, env(safe-area-inset-bottom)) !important;
+  }
+  /* 防止底部导航栏遮挡 */
+  #toast {
+    bottom: max(30px, env(safe-area-inset-bottom));
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>⚽ 足彩每日智能分析</h1>
+  <p>API-Sports联网 · 真实历史数据</p>
+  <div class="api-status local" id="apiStatus">
+    <span class="status-dot"></span>
+    <span id="apiStatusText">准备连接API...</span>
+  </div>
+</div>
+
+<div class="container">
+
+  <div class="top-bar">
+    <select class="form-select" id="leagueSelect" onchange="changeLeague()">
+      <option value="k1">🇰🇷 韩职联</option>
+      <option value="k2">🇰🇷 韩K2联赛</option>
+      <option value="j1">🇯🇵 日职联</option>
+      <option value="csl">🇨🇳 中超</option>
+      <option value="allsvenskan">🇸🇪 瑞超</option>
+      <option value="eliteserien">🇳🇴 挪超</option>
+    </select>
+  </div>
+
+  <div class="date-tabs">
+    <div class="date-tab active" onclick="switchDate(0)">今天</div>
+    <div class="date-tab" onclick="switchDate(1)">明天</div>
+    <div class="date-tab" onclick="switchDate(2)">后天</div>
+  </div>
+
+  <button class="analyze-all-btn" id="analyzeBtn" onclick="analyzeAll()">🔮 自动分析今日全部比赛</button>
+
+  <div class="loading" id="loading">
+    <div class="spinner"></div>
+    <div>正在从API-Sports获取真实数据...</div>
+  </div>
+
+  <div id="results"></div>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ===================== API配置 =====================
+const API_KEY = '8d5d6958982c4da4b357e236414b7b98';
+const API_BASE = 'https://v3.football.api-sports.io';
+const CORS_PROXY = 'https://corsproxy.io/?';
+
+// 联赛配置
+const LEAGUE_CONFIG = {
+  k1: { name: '韩职联', apiId: 292, season: 2026 },
+  k2: { name: '韩K2联赛', apiId: 293, season: 2026 },
+  j1: { name: '日职联', apiId: 98, season: 2026 },
+  csl: { name: '中超', apiId: 169, season: 2026 },
+  allsvenskan: { name: '瑞超', apiId: 113, season: 2026 },
+  eliteserien: { name: '挪超', apiId: 103, season: 2026 },
+};
+
+// 球队名称映射 (API英文 -> 中文)
+const TEAM_NAME_MAP = {
+  // K League 1
+  'Ulsan Hyundai': '蔚山HD', 'Ulsan HD': '蔚山HD', 'Ulsan Hyundai FC': '蔚山HD',
+  'Gangwon FC': '江原FC', 'Gangwon': '江原FC',
+  'Jeonbuk Hyundai Motors': '全北现代', 'Jeonbuk Motors': '全北现代',
+  'FC Seoul': 'FC首尔', 'Seoul': 'FC首尔',
+  'Pohang Steelers': '浦项铁人', 'Pohang': '浦项铁人',
+  'Jeju United': '济州联', 'Jeju': '济州联',
+  'Daejeon Hana Citizen': '大田韩亚市民', 'Daejeon': '大田韩亚市民',
+  'Gwangju FC': '光州FC', 'Gwangju': '光州FC',
+  'Daegu FC': '大邱FC', 'Daegu': '大邱FC',
+  'Incheon United': '仁川联', 'Incheon': '仁川联',
+  'FC Anyang': 'FC安养', 'Anyang': 'FC安养',
+  'Suwon FC': '水原FC', 'Suwon': '水原FC',
+  'Gimcheon Sangmu': '金泉尚武', 'Gimcheon': '金泉尚武',
+  'Seoul E-Land': '首尔衣恋', 'Seoul Eland': '首尔衣恋',
+  // K League 2
+  'Busan IPark': '釜山IPark', 'Busan': '釜山IPark',
+  'Gyeongnam FC': '庆南FC', 'Gyeongnam': '庆南FC',
+  'Seongnam FC': '城南FC', 'Seongnam': '城南FC',
+  'Ansan Greeners': '安山小绿人', 'Ansan': '安山小绿人',
+  'Bucheon FC 1995': '富川FC', 'Bucheon': '富川FC',
+  'Chungnam Asan': '忠南牙山', 'Asan': '忠南牙山',
+  'Gimpo FC': '金浦FC', 'Gimpo': '金浦FC',
+  'Cheonan City': '清州FC', 'Cheonan': '清州FC',
+  'Cheongju FC': '天安城', 'Cheongju': '天安城',
+  'Hwaseong FC': '华城FC', 'Hwaseong': '华城FC',
+  'Seoul Nowon': '首尔芦原', 'Nowon': '首尔芦原',
+  'Siheung City': '始兴市', 'Siheung': '始兴市',
+  'Pyeongtaek Citizen': '平泽市民', 'Pyeongtaek': '平泽市民',
+  'Yangpyeong FC': '杨平FC', 'Yangpyeong': '杨平FC',
+  // J1 League
+  'Vissel Kobe': '神户胜利船', 'Kobe': '神户胜利船',
+  'Sanfrecce Hiroshima': '广岛三箭', 'Hiroshima': '广岛三箭',
+  'Machida Zelvia': '町田泽维亚', 'Machida': '町田泽维亚',
+  'Cerezo Osaka': '大阪樱花',
+  'Kashima Antlers': '鹿岛鹿角', 'Kashima': '鹿岛鹿角',
+  'FC Tokyo': '东京FC', 'Tokyo': '东京FC',
+  'Kawasaki Frontale': '川崎前锋', 'Kawasaki': '川崎前锋',
+  'Yokohama F. Marinos': '横滨水手', 'Yokohama F Marinos': '横滨水手',
+  'Urawa Red Diamonds': '浦和红钻', 'Urawa': '浦和红钻',
+  'Kashiwa Reysol': '柏太阳神', 'Kashiwa': '柏太阳神',
+  'Nagoya Grampus': '名古屋鲸八', 'Nagoya': '名古屋鲸八',
+  'Avispa Fukuoka': '福冈黄蜂', 'Fukuoka': '福冈黄蜂',
+  'Kyoto Sanga': '京都不死鸟', 'Kyoto': '京都不死鸟',
+  'Fagiano Okayama': '冈山绿雉', 'Okayama': '冈山绿雉',
+  'Gamba Osaka': '大阪钢巴',
+  'Albirex Niigata': '新潟天鹅', 'Niigata': '新潟天鹅',
+  'Shonan Bellmare': '湘南海洋', 'Shonan': '湘南海洋',
+  'Hokkaido Consadole Sapporo': '北海道札幌', 'Sapporo': '北海道札幌',
+  'Shimizu S-Pulse': '清水心跳', 'Shimizu': '清水心跳',
+  'Yokohama FC': '横滨FC',
+  // CSL
+  'Shanghai Port': '上海海港', 'Shanghai SIPG': '上海海港',
+  'Shanghai Shenhua': '上海申花',
+  'Shandong Taishan': '山东泰山', 'Shandong': '山东泰山',
+  'Beijing Guoan': '北京国安',
+  'Chengdu Rongcheng': '成都蓉城', 'Chengdu': '成都蓉城',
+  'Zhejiang Professional': '浙江队', 'Zhejiang': '浙江队',
+  'Tianjin Jinmen Tiger': '天津津门虎', 'Tianjin': '天津津门虎',
+  'Changchun Yatai': '长春亚泰', 'Changchun': '长春亚泰',
+  'Henan FC': '河南队', 'Henan': '河南队',
+  'Wuhan Three Towns': '武汉三镇', 'Wuhan': '武汉三镇',
+  'Qingdao Hainiu': '青岛海牛', 'Qingdao Hainiu FC': '青岛海牛',
+  'Qingdao West Coast': '青岛西海岸',
+  'Shenzhen Pengcheng': '深圳新鹏城', 'Shenzhen': '深圳新鹏城',
+  'Yunnan Yukun': '云南玉昆', 'Yunnan': '云南玉昆',
+  'Dalian Yingbo': '大连英博', 'Dalian': '大连英博',
+  'Meizhou Hakka': '梅州客家', 'Meizhou': '梅州客家',
+  // Allsvenskan
+  'Malmö FF': '马尔默', 'Malmo': '马尔默',
+  'AIK Solna': 'AIK索尔纳', 'AIK': 'AIK索尔纳',
+  'Hammarby IF': '哈马比', 'Hammarby': '哈马比',
+  'Djurgårdens IF': '佐加顿斯', 'Djurgardens': '佐加顿斯', 'Djurgarden': '佐加顿斯',
+  'BK Häcken': '赫根', 'Hacken': '赫根',
+  'IFK Göteborg': '哥德堡', 'Goteborg': '哥德堡',
+  'IFK Norrköping': '北雪平', 'Norrkoping': '北雪平',
+  'Kalmar FF': '卡尔马', 'Kalmar': '卡尔马',
+  'IK Sirius': '天狼星', 'Sirius': '天狼星',
+  'IF Brommapojkarna': '布鲁马波卡纳', 'Brommapojkarna': '布鲁马波卡纳',
+  'Mjällby AIF': '米亚尔比', 'Mjallby': '米亚尔比',
+  'IF Elfsborg': '埃尔夫斯堡', 'Elfsborg': '埃尔夫斯堡',
+  'Västerås SK': '韦斯特罗斯', 'Vasteras': '韦斯特罗斯',
+  'GAIS': '哥德堡盖斯',
+  'Halmstads BK': '哈尔姆斯塔德', 'Halmstad': '哈尔姆斯塔德',
+  // Eliteserien
+  'Bodø/Glimt': '博德闪耀', 'Bodo/Glimt': '博德闪耀', 'Bodo Glimt': '博德闪耀',
+  'SK Brann': '布兰', 'Brann': '布兰',
+  'Molde FK': '莫尔德', 'Molde': '莫尔德',
+  'Viking FK': '维京', 'Viking': '维京',
+  'Rosenborg BK': '罗森博格', 'Rosenborg': '罗森博格',
+  'Lillestrøm SK': '利勒斯特罗姆', 'Lillestrom': '利勒斯特罗姆',
+  'Sarpsborg 08': '萨普斯堡', 'Sarpsborg': '萨普斯堡',
+  'Stabæk': '斯塔贝克', 'Stabaek': '斯塔贝克',
+  'Odds BK': '奥德', 'Odd': '奥德',
+  'Haugesund': '海于格松',
+  'Sandefjord': '桑纳菲尤尔',
+  'HamKam': '汉坎',
+  'Tromsø': '特罗姆瑟', 'Tromso': '特罗姆瑟',
+  'Kristiansund BK': '克里斯蒂安松', 'Kristiansund': '克里斯蒂安松',
+  'Fredrikstad FK': '腓特烈斯塔', 'Fredrikstad': '腓特烈斯塔',
+  'KFUM Oslo': '奥斯陆KFUM', 'KFUM': '奥斯陆KFUM',
+};
+
+function getTeamName(apiName) {
+  if (!apiName) return '未知';
+  return TEAM_NAME_MAP[apiName] || apiName;
+}
+
+// ===================== 工具函数 =====================
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2000);
+}
+function getDateStr(offset) {
+  const d = new Date();
+  d.setDate(d.getDate() + offset);
+  return d.toISOString().split('T')[0];
+}
+function formatDateShort(dateStr) {
+  const d = new Date(dateStr);
+  return (d.getMonth()+1) + '/' + d.getDate();
+}
+function formatTimeFromUTC(utcStr) {
+  const d = new Date(utcStr);
+  return d.getHours().toString().padStart(2,'0') + ':' + d.getMinutes().toString().padStart(2,'0');
+}
+
+// ===================== API调用 =====================
+let apiConnected = false;
+let apiRequestCount = 0;
+const MAX_API_REQUESTS = 80; // 留20次余量
+
+async function apiFetch(endpoint) {
+  if (apiRequestCount >= MAX_API_REQUESTS) {
+    console.log('API请求次数已达上限，切换到本地模式');
+    return null;
+  }
+
+  const url = `${API_BASE}${endpoint}${endpoint.includes('?') ? '&' : '?'}apikey=${API_KEY}`;
+  const proxyUrl = CORS_PROXY + encodeURIComponent(url);
+
+  try {
+    const res = await fetch(proxyUrl, { method: 'GET', timeout: 15000 });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    apiRequestCount++;
+    const data = await res.json();
+    if (data.errors && Object.keys(data.errors).length > 0) {
+      console.warn('API Error:', data.errors);
+      return null;
+    }
+    return data;
+  } catch (e) {
+    console.error('Fetch error:', e);
+    return null;
+  }
+}
+
+function updateApiStatus(status) {
+  const el = document.getElementById('apiStatus');
+  const txt = document.getElementById('apiStatusText');
+  if (status === 'online') {
+    el.className = 'api-status online';
+    txt.textContent = 'API-Sports实时数据已连接';
+  } else if (status === 'offline') {
+    el.className = 'api-status offline';
+    txt.textContent = 'API连接失败，使用本地引擎';
+  } else {
+    el.className = 'api-status local';
+    txt.textContent = '本地引擎模式';
+  }
+}
+
+// ===================== 获取赛程 =====================
+async function fetchFixtures(leagueKey, dateStr) {
+  const cfg = LEAGUE_CONFIG[leagueKey];
+  if (!cfg) return null;
+
+  const endpoint = `/fixtures?league=${cfg.apiId}&season=${cfg.season}&date=${dateStr}`;
+  const data = await apiFetch(endpoint);
+
+  if (!data || !data.response || data.response.length === 0) {
+    // 尝试前一年赛季
+    const endpoint2 = `/fixtures?league=${cfg.apiId}&season=${cfg.season-1}&date=${dateStr}`;
+    const data2 = await apiFetch(endpoint2);
+    if (data2 && data2.response && data2.response.length > 0) {
+      apiConnected = true;
+      updateApiStatus('online');
+      return data2.response;
+    }
+    return null;
+  }
+
+  apiConnected = true;
+  updateApiStatus('online');
+  return data.response;
+}
+
+// ===================== 获取球队历史 =====================
+async function fetchTeamHistory(teamId) {
+  const endpoint = `/fixtures?team=${teamId}&last=10`;
+  const data = await apiFetch(endpoint);
+  if (!data || !data.response) return null;
+
+  return data.response.map(m => {
+    const isHome = m.teams.home.id === teamId;
+    const myGoals = isHome ? m.goals.home : m.goals.away;
+    const oppGoals = isHome ? m.goals.away : m.goals.home;
+    let result = 'D';
+    if (myGoals > oppGoals) result = 'W';
+    else if (myGoals < oppGoals) result = 'L';
+
+    return {
+      date: m.fixture.date.split('T')[0],
+      opponent: getTeamName(isHome ? m.teams.away.name : m.teams.home.name),
+      isHome: isHome,
+      myGoals: myGoals || 0,
+      oppGoals: oppGoals || 0,
+      result: result,
+      score: `${myGoals || 0}:${oppGoals || 0}`
+    };
+  });
+}
+
+// ===================== 本地引擎备份 =====================
+const LOCAL_TEAMS = {
+  k1: [
+    {n:'蔚山HD',a:88,d:82,h:5,s:2.1}, {n:'江原FC',a:75,d:70,h:4,s:1.6},
+    {n:'全北现代',a:85,d:80,h:5,s:1.9}, {n:'FC首尔',a:80,d:75,h:4,s:1.7},
+    {n:'浦项铁人',a:78,d:76,h:4,s:1.6}, {n:'济州联',a:72,d:70,h:3,s:1.4},
+    {n:'大田韩亚市民',a:70,d:68,h:3,s:1.3}, {n:'光州FC',a:73,d:71,h:3,s:1.4},
+    {n:'大邱FC',a:68,d:70,h:3,s:1.2}, {n:'仁川联',a:71,d:72,h:3,s:1.3},
+    {n:'FC安养',a:69,d:68,h:3,s:1.3}, {n:'水原FC',a:67,d:66,h:2,s:1.1},
+    {n:'金泉尚武',a:74,d:73,h:4,s:1.5}, {n:'首尔衣恋',a:65,d:64,h:2,s:1.0}
+  ],
+  k2: [
+    {n:'釜山IPark',a:70,d:68,h:3,s:1.4}, {n:'庆南FC',a:68,d:66,h:3,s:1.3},
+    {n:'城南FC',a:65,d:64,h:2,s:1.2}, {n:'安山小绿人',a:62,d:60,h:2,s:1.0},
+    {n:'富川FC',a:66,d:65,h:2,s:1.2}, {n:'忠南牙山',a:67,d:66,h:3,s:1.3},
+    {n:'金浦FC',a:64,d:63,h:2,s:1.1}, {n:'清州FC',a:63,d:62,h:2,s:1.1},
+    {n:'天安城',a:61,d:60,h:2,s:1.0}, {n:'华城FC',a:60,d:59,h:2,s:0.9},
+    {n:'首尔芦原',a:62,d:61,h:2,s:1.0}, {n:'始兴市',a:59,d:58,h:1,s:0.9},
+    {n:'平泽市民',a:58,d:57,h:1,s:0.8}, {n:'杨平FC',a:56,d:55,h:1,s:0.7}
+  ],
+  j1: [
+    {n:'神户胜利船',a:84,d:80,h:4,s:1.9}, {n:'广岛三箭',a:83,d:81,h:4,s:1.8},
+    {n:'町田泽维亚',a:82,d:79,h:4,s:1.8}, {n:'大阪樱花',a:81,d:78,h:4,s:1.7},
+    {n:'鹿岛鹿角',a:80,d:79,h:4,s:1.7}, {n:'东京FC',a:79,d:78,h:4,s:1.7},
+    {n:'川崎前锋',a:82,d:80,h:4,s:1.8}, {n:'横滨水手',a:81,d:79,h:4,s:1.8},
+    {n:'浦和红钻',a:80,d:80,h:4,s:1.7}, {n:'柏太阳神',a:78,d:77,h:3,s:1.6},
+    {n:'名古屋鲸八',a:77,d:78,h:3,s:1.6}, {n:'福冈黄蜂',a:76,d:77,h:3,s:1.5},
+    {n:'京都不死鸟',a:75,d:76,h:3,s:1.5}, {n:'冈山绿雉',a:74,d:75,h:3,s:1.4},
+    {n:'大阪钢巴',a:79,d:78,h:4,s:1.7}, {n:'新潟天鹅',a:73,d:74,h:3,s:1.4},
+    {n:'湘南海洋',a:72,d:73,h:2,s:1.4}, {n:'北海道札幌',a:71,d:72,h:2,s:1.3},
+    {n:'清水心跳',a:70,d:71,h:2,s:1.3}, {n:'横滨FC',a:69,d:70,h:2,s:1.2}
+  ],
+  csl: [
+    {n:'上海海港',a:85,d:80,h:5,s:2.0}, {n:'上海申花',a:84,d:81,h:5,s:1.9},
+    {n:'山东泰山',a:83,d:79,h:4,s:1.9}, {n:'北京国安',a:82,d:78,h:4,s:1.8},
+    {n:'成都蓉城',a:80,d:76,h:4,s:1.7}, {n:'浙江队',a:79,d:77,h:4,s:1.7},
+    {n:'天津津门虎',a:76,d:75,h:3,s:1.5}, {n:'长春亚泰',a:75,d:74,h:3,s:1.5},
+    {n:'河南队',a:74,d:73,h:3,s:1.4}, {n:'武汉三镇',a:76,d:75,h:3,s:1.5},
+    {n:'青岛海牛',a:72,d:71,h:2,s:1.3}, {n:'青岛西海岸',a:71,d:70,h:2,s:1.3},
+    {n:'深圳新鹏城',a:70,d:69,h:2,s:1.2}, {n:'云南玉昆',a:68,d:67,h:2,s:1.1},
+    {n:'大连英博',a:69,d:68,h:2,s:1.2}, {n:'梅州客家',a:67,d:66,h:2,s:1.1}
+  ],
+  allsvenskan: [
+    {n:'马尔默',a:82,d:78,h:4,s:1.8}, {n:'AIK索尔纳',a:78,d:76,h:4,s:1.6},
+    {n:'哈马比',a:77,d:75,h:4,s:1.6}, {n:'佐加顿斯',a:79,d:77,h:4,s:1.7},
+    {n:'赫根',a:76,d:75,h:3,s:1.5}, {n:'哥德堡',a:74,d:73,h:3,s:1.4},
+    {n:'北雪平',a:73,d:72,h:3,s:1.4}, {n:'卡尔马',a:72,d:71,h:3,s:1.3},
+    {n:'天狼星',a:71,d:70,h:3,s:1.3}, {n:'瓦纳默',a:70,d:69,h:2,s:1.2},
+    {n:'米亚尔比',a:71,d:71,h:3,s:1.3}, {n:'埃尔夫斯堡',a:75,d:74,h:3,s:1.5},
+    {n:'韦斯特罗斯',a:68,d:67,h:2,s:1.1}, {n:'布鲁马波卡纳',a:69,d:68,h:2,s:1.1},
+    {n:'哥德堡盖斯',a:70,d:69,h:2,s:1.2}, {n:'哈尔姆斯塔德',a:69,d:68,h:2,s:1.1}
+  ],
+  eliteserien: [
+    {n:'博德闪耀',a:83,d:78,h:4,s:1.8}, {n:'布兰',a:80,d:76,h:4,s:1.7},
+    {n:'莫尔德',a:81,d:77,h:4,s:1.7}, {n:'维京',a:78,d:75,h:3,s:1.6},
+    {n:'罗森博格',a:79,d:76,h:4,s:1.6}, {n:'利勒斯特罗姆',a:76,d:74,h:3,s:1.5},
+    {n:'萨普斯堡',a:74,d:73,h:3,s:1.4}, {n:'斯塔贝克',a:73,d:72,h:3,s:1.4},
+    {n:'奥德',a:72,d:71,h:3,s:1.3}, {n:'海于格松',a:71,d:70,h:3,s:1.3},
+    {n:'桑纳菲尤尔',a:69,d:68,h:2,s:1.2}, {n:'汉坎',a:68,d:67,h:2,s:1.1},
+    {n:'特罗姆瑟',a:70,d:69,h:2,s:1.2}, {n:'克里斯蒂安松',a:67,d:66,h:2,s:1.1},
+    {n:'腓特烈斯塔',a:71,d:70,h:3,s:1.3}, {n:'奥斯陆KFUM',a:66,d:65,h:2,s:1.0}
+  ]
+};
+
+function getDateSeed(str) {
+  let h = 0;
+  for (let i = 0; i < str.length; i++) {
+    h = ((h << 5) - h) + str.charCodeAt(i);
+    h |= 0;
+  }
+  return Math.abs(h);
+}
+function sr(seed) {
+  const x = Math.sin(seed++) * 10000;
+  return x - Math.floor(x);
+}
+function poisson(lam, r) {
+  const L = Math.exp(-lam);
+  let k = 0, p = 1;
+  do { k++; p *= r; } while (p > L);
+  return Math.max(0, k-1);
+}
+
+function generateLocalMatches(leagueKey, dateStr) {
+  const teams = LOCAL_TEAMS[leagueKey];
+  if (!teams) return [];
+  const seed = getDateSeed(dateStr + leagueKey);
+  const count = 4 + (seed % 3);
+  const matches = [];
+  const used = new Set();
+
+  for (let i = 0; i < count * 5; i++) {
+    if (matches.length >= count) break;
+    const i1 = Math.floor(sr(seed + i) * teams.length);
+    const i2 = Math.floor(sr(seed + i + 500) * teams.length);
+    if (i1 === i2) continue;
+    const t1 = teams[i1].n, t2 = teams[i2].n;
+    const key = t1 < t2 ? t1+'-'+t2 : t2+'-'+t1;
+    if (!used.has(key)) {
+      used.add(key);
+      const hour = 18 + Math.floor(sr(seed + i + 1000) * 4);
+      const min = Math.floor(sr(seed + i + 1100) * 60);
+      matches.push({ home: t1, away: t2, time: hour.toString().padStart(2,'0') + ':' + min.toString().padStart(2,'0'), homeId: null, awayId: null });
+    }
+  }
+  return matches.sort((a,b) => a.time.localeCompare(b.time));
+}
+
+function generateLocalHistory(teamName, leagueKey, endDate) {
+  const allTeams = LOCAL_TEAMS[leagueKey];
+  const team = allTeams.find(t => t.n === teamName);
+  if (!team) return [];
+
+  const matches = [];
+  const seed = getDateSeed(teamName + leagueKey + endDate);
+  let currDate = new Date(endDate);
+
+  for (let i = 0; i < 10; i++) {
+    currDate.setDate(currDate.getDate() - (3 + Math.floor(sr(seed + i) * 5)));
+    const dateStr = currDate.toISOString().split('T')[0];
+    let oppIdx = Math.floor(sr(seed + i + 100) * allTeams.length);
+    while (allTeams[oppIdx].n === teamName) {
+      oppIdx = Math.floor(sr(seed + i + 100 + oppIdx) * allTeams.length);
+    }
+    const opponent = allTeams[oppIdx];
+    const isHome = sr(seed + i + 200) > 0.35;
+    const homeAdv = isHome ? 1.15 : 0.88;
+    const myExp = Math.max(0.8, (team.a / opponent.d) * homeAdv * team.s * 0.9 + 0.3);
+    const oppExp = Math.max(0.5, (opponent.a / team.d) * (isHome ? 0.88 : 1.15) * opponent.s * 0.9 + 0.2);
+    const myGoals = poisson(myExp, sr(seed + i + 300));
+    const oppGoals = poisson(oppExp, sr(seed + i + 400));
+    let result = 'D';
+    if (myGoals > oppGoals) result = 'W';
+    else if (myGoals < oppGoals) result = 'L';
+
+    matches.push({
+      date: dateStr, opponent: opponent.n, isHome: isHome,
+      myGoals: myGoals, oppGoals: oppGoals, result: result,
+      score: isHome ? `${myGoals}:${oppGoals}` : `${oppGoals}:${myGoals}`
+    });
+  }
+  return matches;
+}
+
+function calcStats(matches) {
+  let wins = 0, draws = 0, losses = 0;
+  let goalsFor = 0, goalsAgainst = 0;
+  let homeWins = 0, homeGames = 0;
+  let awayWins = 0, awayGames = 0;
+
+  matches.forEach(m => {
+    if (m.result === 'W') wins++; else if (m.result === 'D') draws++; else losses++;
+    goalsFor += m.myGoals; goalsAgainst += m.oppGoals;
+    if (m.isHome) { homeGames++; if (m.result === 'W') homeWins++; }
+    else { awayGames++; if (m.result === 'W') awayWins++; }
+  });
+
+  return {
+    record: `${wins}胜${draws}平${losses}负`,
+    avgG: (goalsFor / matches.length).toFixed(1),
+    avgC: (goalsAgainst / matches.length).toFixed(1),
+    homeWinRate: homeGames > 0 ? Math.round(homeWins / homeGames * 100) + '%' : '--',
+    awayWinRate: awayGames > 0 ? Math.round(awayWins / awayGames * 100) + '%' : '--',
+    form: matches.slice(0, 5).map(m => m.result).reverse()
+  };
+}
+
+// ===================== 分析引擎 =====================
+function analyzeMatch(homeName, awayName, homeMatches, awayMatches, useApi) {
+  const leagueKey = currentLeague;
+  const teams = LOCAL_TEAMS[leagueKey];
+  const home = teams.find(t => t.n === homeName) || {a:75,d:70,h:3,s:1.5};
+  const away = teams.find(t => t.n === awayName) || {a:73,d:72,h:2,s:1.4};
+
+  const homeStats = calcStats(homeMatches);
+  const awayStats = calcStats(awayMatches);
+  const homeWinRate = parseInt(homeStats.record.split('胜')[0]) / 10;
+  const awayWinRate = parseInt(awayStats.record.split('胜')[0]) / 10;
+  const homeForm = 0.7 + homeWinRate * 0.3;
+  const awayForm = 0.7 + awayWinRate * 0.3;
+
+  const homeAdv = 1 + (home.h - away.h) * 0.015 + 0.08;
+  const homeScoreExp = Math.max(1.0, (home.a * homeForm / (away.d * awayForm)) * homeAdv * 1.4 + 0.4);
+  const awayScoreExp = Math.max(0.8, (away.a * awayForm / (home.d * homeForm)) * 0.95 + 0.2);
+
+  const totalOdd = 1/2.0 + 1/3.2 + 1/3.5;
+  const impW = (1/2.0) / totalOdd;
+  const impD = (1/3.2) / totalOdd;
+  const impL = (1/3.5) / totalOdd;
+
+  const modelW = homeScoreExp / (homeScoreExp + awayScoreExp + 0.5);
+  const modelL = awayScoreExp / (homeScoreExp + awayScoreExp + 0.5);
+  const modelD = 1 - modelW - modelL;
+
+  const pW = impW * 0.2 + modelW * 0.8;
+  const pD = impD * 0.2 + Math.max(0, modelD) * 0.8;
+  const pL = impL * 0.2 + modelL * 0.8;
+  const sum = pW + pD + pL;
+  const fW = pW/sum, fD = pD/sum, fL = pL/sum;
+
+  let res1X2, conf1X2Val;
+  if (fW > fD && fW > fL) { res1X2 = '主胜'; conf1X2Val = fW; }
+  else if (fD > fW && fD > fL) { res1X2 = '平局'; conf1X2Val = fD; }
+  else { res1X2 = '客胜'; conf1X2Val = fL; }
+
+  const spread = homeScoreExp - awayScoreExp;
+  let resHandicap, confHandicapVal;
+  const adj = spread - 0.5;
+  if (adj > 0.3) { resHandicap = '让胜'; confHandicapVal = Math.min(0.85, (adj+0.5)*0.5); }
+  else if (adj < -0.3) { resHandicap = '让负'; confHandicapVal = Math.min(0.85, (-adj+0.5)*0.5); }
+  else { resHandicap = '让平'; confHandicapVal = Math.min(0.85, 0.5 - Math.abs(adj)*0.3); }
+
+  const scores = [];
+  const seed = getDateSeed(homeName + awayName + currentDate);
+  for (let i = 0; i < 500; i++) {
+    const s1 = poisson(homeScoreExp, sr(seed + i));
+    const s2 = poisson(awayScoreExp, sr(seed + i + 600));
+    scores.push(`${s1}:${s2}`);
+  }
+  const freq = {};
+  scores.forEach(s => freq[s] = (freq[s]||0)+1);
+  const sorted = Object.entries(freq).sort((a,b) => b[1]-a[1]);
+  const top3 = sorted.slice(0, 3);
+  const scoreTags = top3.map(x => x[0]);
+  const scoreConfVal = top3[0][1] / 500;
+
+  const totalExp = homeScoreExp + awayScoreExp;
+  let goalsText, goalsConfVal;
+  if (totalExp < 1.8) { goalsText = '0-1球'; goalsConfVal = (1.8-totalExp)/1.8*0.6+0.2; }
+  else if (totalExp < 2.6) { goalsText = '2-3球'; goalsConfVal = 0.55 + (2.6-totalExp)*0.1; }
+  else if (totalExp < 3.5) { goalsText = '3-4球'; goalsConfVal = 0.5 + (totalExp-2.6)*0.08; }
+  else { goalsText = '4球以上'; goalsConfVal = (totalExp-3.5)*0.15+0.4; }
+  goalsConfVal = Math.min(0.9, goalsConfVal);
+
+  const htH = homeScoreExp * 0.45;
+  const htA = awayScoreExp * 0.40;
+  const htD = htH - htA;
+  const ftD = homeScoreExp - awayScoreExp;
+  let htft, htftConfVal;
+  if (htD > 0.2 && ftD > 0.2) { htft = '胜/胜'; htftConfVal = fW*0.8; }
+  else if (htD > 0.2 && Math.abs(ftD) <= 0.2) { htft = '胜/平'; htftConfVal = fD*0.7; }
+  else if (htD > 0.2 && ftD < -0.2) { htft = '胜/负'; htftConfVal = fL*0.6; }
+  else if (Math.abs(htD) <= 0.2 && ftD > 0.2) { htft = '平/胜'; htftConfVal = fW*0.7; }
+  else if (Math.abs(htD) <= 0.2 && Math.abs(ftD) <= 0.2) { htft = '平/平'; htftConfVal = fD*0.8; }
+  else if (Math.abs(htD) <= 0.2 && ftD < -0.2) { htft = '平/负'; htftConfVal = fL*0.7; }
+  else if (htD < -0.2 && ftD > 0.2) { htft = '负/胜'; htftConfVal = fW*0.5; }
+  else if (htD < -0.2 && Math.abs(ftD) <= 0.2) { htft = '负/平'; htftConfVal = fD*0.6; }
+  else { htft = '负/负'; htftConfVal = fL*0.8; }
+  htftConfVal = Math.min(0.85, htftConfVal);
+
+  const best = top3[0][0].split(':');
+  const ft1 = parseInt(best[0]), ft2 = parseInt(best[1]);
+  let htS1 = Math.max(0, Math.round(ft1 * (0.35 + sr(seed + 999) * 0.25)));
+  let htS2 = Math.max(0, Math.round(ft2 * (0.3 + sr(seed + 998) * 0.25)));
+  if (ft1 > 0 && htS1 === 0) htS1 = Math.min(1, ft1);
+  if (ft2 > 0 && htS2 === 0) htS2 = Math.min(1, ft2);
+
+  return {
+    homeName, awayName, useApi,
+    res1X2, conf1X2: Math.round(conf1X2Val*100),
+    resHandicap, confHandicap: Math.round(confHandicapVal*100),
+    scores: scoreTags, confScore: Math.round(scoreConfVal*100),
+    goals: goalsText, confGoals: Math.round(goalsConfVal*100),
+    htft, confHTFT: Math.round(htftConfVal*100),
+    htScore: `${htS1}:${htS2}`, ftScore: top3[0][0], totalGoals: ft1 + ft2,
+    homeStats, awayStats, homeMatches, awayMatches
+  };
+}
+
+function getConfClass(val) {
+  if (val >= 60) return 'high';
+  if (val >= 45) return 'medium';
+  return 'low';
+}
+
+// ===================== 主流程 =====================
+let currentLeague = 'k1';
+let currentDateOffset = 0;
+let currentDate = getDateStr(0);
+
+async function analyzeAll() {
+  const btn = document.getElementById('analyzeBtn');
+  const loading = document.getElementById('loading');
+  const results = document.getElementById('results');
+
+  btn.disabled = true;
+  loading.classList.add('active');
+  results.innerHTML = '';
+  apiRequestCount = 0;
+
+  const dateStr = getDateStr(currentDateOffset);
+  currentDate = dateStr;
+  const cfg = LEAGUE_CONFIG[currentLeague];
+
+  // 尝试从API获取赛程
+  let apiFixtures = await fetchFixtures(currentLeague, dateStr);
+  let matches = [];
+  let useApi = false;
+
+  if (apiFixtures && apiFixtures.length > 0) {
+    useApi = true;
+    matches = apiFixtures.map(f => ({
+      home: getTeamName(f.teams.home.name),
+      away: getTeamName(f.teams.away.name),
+      time: formatTimeFromUTC(f.fixture.date),
+      homeId: f.teams.home.id,
+      awayId: f.teams.away.id,
+      status: f.fixture.status.short
+    })).filter(m => m.home !== '未知' && m.away !== '未知');
+  }
+
+  // 如果API没有数据，用本地引擎
+  if (matches.length === 0) {
+    useApi = false;
+    updateApiStatus('offline');
+    matches = generateLocalMatches(currentLeague, dateStr);
+  }
+
+  if (matches.length === 0) {
+    results.innerHTML = '<div class="empty-state"><div class="icon">📅</div><p>该日期暂无比赛</p></div>';
+    loading.classList.remove('active');
+    btn.disabled = false;
+    return;
+  }
+
+  // 分析每场比赛
+  const analyzed = [];
+  for (let i = 0; i < matches.length; i++) {
+    const m = matches[i];
+    let homeMatches, awayMatches;
+    let matchUseApi = useApi;
+
+    if (useApi && m.homeId && m.awayId) {
+      // 尝试获取API真实历史
+      const [hm, am] = await Promise.all([
+        fetchTeamHistory(m.homeId),
+        fetchTeamHistory(m.awayId)
+      ]);
+      if (hm && hm.length >= 5 && am && am.length >= 5) {
+        homeMatches = hm;
+        awayMatches = am;
+      } else {
+        // API历史不足，回退本地
+        homeMatches = generateLocalHistory(m.home, currentLeague, dateStr);
+        awayMatches = generateLocalHistory(m.away, currentLeague, dateStr);
+        matchUseApi = false;
+      }
+    } else {
+      homeMatches = generateLocalHistory(m.home, currentLeague, dateStr);
+      awayMatches = generateLocalHistory(m.away, currentLeague, dateStr);
+    }
+
+    const result = analyzeMatch(m.home, m.away, homeMatches, awayMatches, matchUseApi);
+    analyzed.push({ result, match: m });
+  }
+
+  // 渲染
+  results.innerHTML = analyzed.map((r, idx) => `
+    <div class="match-card" style="animation-delay: ${idx * 0.1}s">
+      <div class="match-header">
+        <div class="match-teams">
+          <span class="team-name">${r.result.homeName}</span>
+          <span class="vs">VS</span>
+          <span class="team-name">${r.result.awayName}</span>
+        </div>
+        <div style="display:flex;align-items:center;">
+          <span class="match-time">${r.match.time}</span>
+          <span class="data-source ${r.result.useApi ? 'api' : 'local'}">${r.result.useApi ? 'API' : '本地'}</span>
+        </div>
+      </div>
+
+      <div class="pred-row">
+        <div class="pred-cell">
+          <div class="label">胜平负</div>
+          <div class="value">${r.result.res1X2}</div>
+          <div class="conf ${getConfClass(r.result.conf1X2)}">${r.result.conf1X2}%</div>
+        </div>
+        <div class="pred-cell">
+          <div class="label">让球(-0.5)</div>
+          <div class="value">${r.result.resHandicap}</div>
+          <div class="conf ${getConfClass(r.result.confHandicap)}">${r.result.confHandicap}%</div>
+        </div>
+        <div class="pred-cell">
+          <div class="label">进球数</div>
+          <div class="value small">${r.result.goals}</div>
+          <div class="conf ${getConfClass(r.result.confGoals)}">${r.result.confGoals}%</div>
+        </div>
+      </div>
+
+      <div class="score-row">
+        ${r.result.scores.map(s => `<span class="score-tag">${s}</span>`).join('')}
+      </div>
+
+      <div class="detail-row">
+        <div class="detail-cell">
+          <div class="d-label">半场</div>
+          <div class="d-value">${r.result.htScore}</div>
+        </div>
+        <div class="detail-cell">
+          <div class="d-label">全场</div>
+          <div class="d-value">${r.result.ftScore}</div>
+        </div>
+        <div class="detail-cell">
+          <div class="d-label">半全场</div>
+          <div class="d-value">${r.result.htft}</div>
+        </div>
+      </div>
+
+      <button class="expand-btn" onclick="toggleExpand(${idx})">📊 查看两队近期战绩</button>
+
+      <div class="expanded-info" id="expand-${idx}">
+        <div class="team-mini-stats">
+          <div class="mini-stat">
+            <div class="ms-name">${r.result.homeName}</div>
+            <div class="ms-row"><span>近10场</span><span>${r.result.homeStats.record}</span></div>
+            <div class="ms-row"><span>场均进/失</span><span>${r.result.homeStats.avgG}/${r.result.homeStats.avgC}</span></div>
+            <div class="ms-row"><span>主场胜率</span><span>${r.result.homeStats.homeWinRate}</span></div>
+            <div class="form-dots">${r.result.homeStats.form.map(x => `<span class="form-dot ${x}">${x}</span>`).join('')}</div>
+          </div>
+          <div class="mini-stat">
+            <div class="ms-name">${r.result.awayName}</div>
+            <div class="ms-row"><span>近10场</span><span>${r.result.awayStats.record}</span></div>
+            <div class="ms-row"><span>场均进/失</span><span>${r.result.awayStats.avgG}/${r.result.awayStats.avgC}</span></div>
+            <div class="ms-row"><span>客场胜率</span><span>${r.result.awayStats.awayWinRate}</span></div>
+            <div class="form-dots">${r.result.awayStats.form.map(x => `<span class="form-dot ${x}">${x}</span>`).join('')}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `).join('');
+
+  loading.classList.remove('active');
+  btn.disabled = false;
+  showToast(`已分析 ${matches.length} 场比赛 (${analyzed.filter(a=>a.result.useApi).length} 场API数据)`);
+}
+
+function toggleExpand(idx) {
+  const el = document.getElementById('expand-' + idx);
+  el.classList.toggle('active');
+}
+
+function changeLeague() {
+  currentLeague = document.getElementById('leagueSelect').value;
+  analyzeAll();
+}
+
+function switchDate(offset) {
+  currentDateOffset = offset;
+  document.querySelectorAll('.date-tab').forEach((el, i) => {
+    el.classList.toggle('active', i === offset);
+  });
+  analyzeAll();
+}
+
+// ===================== PWA =====================
+const swCode = `self.addEventListener('install',e=>self.skipWaiting());self.addEventListener('activate',e=>e.waitUntil(self.clients.claim()));self.addEventListener('fetch',e=>e.respondWith(fetch(e.request).catch(()=>new Response('Offline'))));`;
+if ('serviceWorker' in navigator) {
+  const blob = new Blob([swCode], {type: 'application/javascript'});
+  const swUrl = URL.createObjectURL(blob);
+  navigator.serviceWorker.register(swUrl).catch(() => {});
+}
+
+// 初始化
+updateApiStatus('local');
+setTimeout(() => analyzeAll(), 500);
+</script>
+
+<script>
+// ====== Capacitor 原生适配 ======
+document.addEventListener('DOMContentLoaded', function() {
+  // 等待Capacitor桥接加载
+  setTimeout(async function() {
+    if (window.Capacitor && window.Capacitor.Plugins) {
+      try {
+        const { StatusBar } = window.Capacitor.Plugins;
+        if (StatusBar) {
+          await StatusBar.setBackgroundColor({ color: '#070b14' });
+          await StatusBar.setStyle({ style: 'DARK' });
+        }
+      } catch(e) { console.log('StatusBar init', e); }
+
+      try {
+        const { App } = window.Capacitor.Plugins;
+        if (App) {
+          // Android返回键处理：能返回就返回，不能就退出
+          App.addListener('backButton', function(data) {
+            if (data && data.canGoBack) {
+              window.history.back();
+            } else {
+              App.exitApp();
+            }
+          });
+        }
+      } catch(e) { console.log('App init', e); }
+
+      try {
+        const { SplashScreen } = window.Capacitor.Plugins;
+        if (SplashScreen) {
+          setTimeout(() => SplashScreen.hide(), 1500);
+        }
+      } catch(e) { console.log('Splash init', e); }
+    }
+  }, 300);
+});
+</script>
+</body>
+</html>
 
