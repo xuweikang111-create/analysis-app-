@@ -54,3 +54,14 @@ jobs:
           name: miqi-v1.2.0-debug
           path: LobsterAI/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
+
+      - name: Archive exact source
+        run: |
+          zip -r ../MiqiAI-v1.2.0-source.zip . -x '.gradle/*' 'build/*' 'app/build/*'
+
+      - name: Upload exact source
+        uses: actions/upload-artifact@v4
+        with:
+          name: miqi-v1.2.0-source
+          path: MiqiAI-v1.2.0-source.zip
+          if-no-files-found: error
