@@ -61,3 +61,4 @@ class ApiKeyVault @Inject constructor(
     fun delete(ref: String) {
         prefs.edit().remove(ref).apply()
     }
+}
