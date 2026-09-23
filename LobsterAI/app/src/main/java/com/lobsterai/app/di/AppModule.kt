@@ -2,6 +2,8 @@ package com.lobsterai.app.di
 
 import android.content.Context
 import androidx.room.Room
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import com.lobsterai.app.data.local.AppDatabase
 import com.lobsterai.app.data.repository.AppRepositoryImpl
 import com.lobsterai.app.domain.repository.AppRepository
@@ -29,11 +31,18 @@ abstract class RepositoryModule {
 @Module
 @InstallIn(SingletonComponent::class)
 object AppModule {
+    private val MIGRATION_1_2 = object : Migration(1, 2) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE messages ADD COLUMN imageUri TEXT")
+        }
+    }
+
     @Provides
     @Singleton
     fun provideDatabase(@ApplicationContext context: Context): AppDatabase =
         Room.databaseBuilder(context, AppDatabase::class.java, "lobster_ai.db")
-            .fallbackToDestructiveMigration()
+            .addMigrations(MIGRATION_1_2)
+            .fallbackToDestructiveMigrationOnDowngrade()
             .build()
 
     @Provides
