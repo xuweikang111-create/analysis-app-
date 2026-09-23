@@ -3,11 +3,9 @@ package com.lobsterai.app.ui.home
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -19,13 +17,12 @@ import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.ChatBubbleOutline
 import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.Menu
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -50,9 +47,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.lobsterai.app.domain.model.Lobster
 import com.lobsterai.app.ui.components.LobsterAvatar
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
+    onOpenDrawer: () -> Unit = {},
     onOpenChat: () -> Unit = {},
     viewModel: HomeViewModel = hiltViewModel()
 ) {
@@ -65,11 +62,16 @@ fun HomeScreen(
     Scaffold(
         topBar = {
             TopAppBar(
+                navigationIcon = {
+                    IconButton(onClick = onOpenDrawer) {
+                        Icon(Icons.Outlined.Menu, contentDescription = "菜单")
+                    }
+                },
                 title = {
                     Column {
-                        Text("米奇", fontWeight = FontWeight.SemiBold)
+                        Text("角色与成长", fontWeight = FontWeight.SemiBold)
                         Text(
-                            "会成长、会记住你的 AI 伙伴",
+                            "养成系统隐藏在聊天背后",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -77,7 +79,7 @@ fun HomeScreen(
                 },
                 actions = {
                     IconButton(onClick = { addDialog = true }) {
-                        Icon(Icons.Outlined.Add, contentDescription = "新增龙虾")
+                        Icon(Icons.Outlined.Add, contentDescription = "新增角色")
                     }
                 }
             )
@@ -95,7 +97,12 @@ fun HomeScreen(
                     items(state.lobsters, key = { it.id }) { item ->
                         AssistChip(
                             onClick = { viewModel.select(item.id) },
-                            label = { Text(if (item.id == lobster?.id) "${item.name} · 当前" else item.name) }
+                            label = {
+                                Text(
+                                    if (item.id == lobster?.id) "${item.name} · 当前"
+                                    else item.name
+                                )
+                            }
                         )
                     }
                 }
@@ -104,7 +111,7 @@ fun HomeScreen(
             item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(30.dp),
+                    shape = RoundedCornerShape(28.dp),
                     colors = CardDefaults.cardColors(
                         containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
                     )
@@ -112,32 +119,30 @@ fun HomeScreen(
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 22.dp, vertical = 20.dp),
+                            .padding(20.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         LobsterAvatar(
                             modifier = Modifier
-                                .fillMaxWidth(0.48f)
+                                .fillMaxWidth(0.42f)
                                 .aspectRatio(1f)
                         )
                         Text(
-                            lobster?.name ?: "正在唤醒…",
+                            lobster?.name ?: "角色",
                             style = MaterialTheme.typography.headlineSmall,
                             fontWeight = FontWeight.Bold
                         )
                         Text(
-                            "Lv.${lobster?.level ?: 1}  ·  亲密度 ${lobster?.intimacy ?: 0}",
+                            "Lv.${lobster?.level ?: 1} · 亲密度 ${lobster?.intimacy ?: 0}",
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                        Spacer(Modifier.height(2.dp))
                         Button(
                             onClick = onOpenChat,
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Icon(Icons.Outlined.ChatBubbleOutline, contentDescription = null)
-                            Spacer(Modifier.size(8.dp))
-                            Text("开始聊天")
+                            Text("继续聊天", modifier = Modifier.padding(start = 8.dp))
                         }
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -149,8 +154,7 @@ fun HomeScreen(
                                 enabled = lobster != null
                             ) {
                                 Icon(Icons.Outlined.Edit, contentDescription = null)
-                                Spacer(Modifier.size(6.dp))
-                                Text("编辑人设")
+                                Text("人设", modifier = Modifier.padding(start = 6.dp))
                             }
                             FilledTonalButton(
                                 onClick = viewModel::deleteSelected,
@@ -158,8 +162,7 @@ fun HomeScreen(
                                 enabled = state.lobsters.size > 1
                             ) {
                                 Icon(Icons.Outlined.DeleteOutline, contentDescription = null)
-                                Spacer(Modifier.size(6.dp))
-                                Text("删除角色")
+                                Text("删除", modifier = Modifier.padding(start = 6.dp))
                             }
                         }
                     }
@@ -167,78 +170,95 @@ fun HomeScreen(
             }
 
             item {
-                Card(modifier = Modifier.fillMaxWidth()) {
+                Card(Modifier.fillMaxWidth()) {
                     Column(
                         Modifier.padding(16.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
+                            Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Text("伙伴状态", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                            Text(
+                                "成长状态",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.SemiBold
+                            )
                             Text(
                                 "今日 ${daily.completedCount}/4",
-                                style = MaterialTheme.typography.labelLarge,
                                 color = MaterialTheme.colorScheme.primary
                             )
                         }
-                        val expProgress = lobster?.let(::experienceProgress) ?: 0
-                        StatusBar("经验", lobster?.experience ?: 0, expProgress)
-                        StatusBar("心情", lobster?.mood ?: 0, lobster?.mood ?: 0)
-                        StatusBar("饱食度", lobster?.satiety ?: 0, lobster?.satiety ?: 0)
-                        StatusBar("亲密度", lobster?.intimacy ?: 0, (lobster?.intimacy ?: 0).coerceAtMost(100))
+                        StatusLine("经验", lobster?.experience ?: 0, lobster?.let(::experienceProgress) ?: 0)
+                        StatusLine("心情", lobster?.mood ?: 0, lobster?.mood ?: 0)
+                        StatusLine("饱食度", lobster?.satiety ?: 0, lobster?.satiety ?: 0)
+                        StatusLine(
+                            "亲密度",
+                            lobster?.intimacy ?: 0,
+                            (lobster?.intimacy ?: 0).coerceAtMost(100)
+                        )
                     }
                 }
             }
 
             item {
-                Card(modifier = Modifier.fillMaxWidth()) {
+                Card(Modifier.fillMaxWidth()) {
                     Column(
                         Modifier.padding(16.dp),
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        Text("今日互动", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                        Text(
+                            "今日互动",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold
+                        )
                         Row(
-                            Modifier.fillMaxWidth(),
+                            modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             FilledTonalButton(
                                 onClick = { viewModel.perform("checkin") },
                                 modifier = Modifier.weight(1f),
                                 enabled = !daily.checkedIn && !state.busy
-                            ) { Text(if (daily.checkedIn) "已签到" else "签到") }
+                            ) {
+                                Text(if (daily.checkedIn) "已签到" else "签到")
+                            }
                             FilledTonalButton(
                                 onClick = { viewModel.perform("feed") },
                                 modifier = Modifier.weight(1f),
                                 enabled = !state.busy
-                            ) { Text(if (daily.fed) "再喂食" else "喂食") }
+                            ) {
+                                Text("喂食")
+                            }
                             FilledTonalButton(
                                 onClick = { viewModel.perform("interact") },
                                 modifier = Modifier.weight(1f),
                                 enabled = !state.busy
-                            ) { Text(if (daily.interacted) "再互动" else "互动") }
+                            ) {
+                                Text("互动")
+                            }
                         }
                         Text(
-                            if (daily.chatted) "聊天任务已完成" else "发送一条消息即可完成今日聊天任务",
+                            if (daily.chatted) "今日聊天任务已完成"
+                            else "发一条消息即可完成聊天任务",
                             style = MaterialTheme.typography.bodySmall,
-                            color = if (daily.chatted) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                        if (state.busy) {
-                            CircularProgressIndicator(modifier = Modifier.size(22.dp))
-                        }
                     }
                 }
             }
 
             item {
-                Card(modifier = Modifier.fillMaxWidth()) {
+                Card(Modifier.fillMaxWidth()) {
                     Column(
                         Modifier.padding(16.dp),
                         verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        Text("角色 Prompt", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                        Text(
+                            "角色 Prompt",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold
+                        )
                         Text(
                             lobster?.prompt?.ifBlank { "未设置" } ?: "未设置",
                             color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -250,10 +270,10 @@ fun HomeScreen(
     }
 
     if (addDialog) {
-        LobsterEditorDialog(
-            title = "创建新龙虾",
+        RoleDialog(
+            title = "创建角色",
             initialName = "",
-            initialPrompt = "你是一只成熟、可靠、自然的 AI 龙虾伙伴。",
+            initialPrompt = "你是米奇里的成熟、可靠、自然的 AI 伙伴。",
             onDismiss = { addDialog = false },
             onSave = { name, prompt ->
                 viewModel.addLobster(name, prompt)
@@ -263,7 +283,7 @@ fun HomeScreen(
     }
 
     if (editPrompt && lobster != null) {
-        LobsterEditorDialog(
+        RoleDialog(
             title = "编辑角色 Prompt",
             initialName = lobster.name,
             initialPrompt = lobster.prompt,
@@ -278,14 +298,21 @@ fun HomeScreen(
 }
 
 @Composable
-private fun StatusBar(label: String, valueText: Int, progress: Int) {
-    Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+private fun StatusLine(
+    label: String,
+    value: Int,
+    progress: Int
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Row(
             Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Text(label)
-            Text(valueText.toString(), color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(
+                value.toString(),
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
         LinearProgressIndicator(
             progress = { progress.coerceIn(0, 100) / 100f },
@@ -295,7 +322,7 @@ private fun StatusBar(label: String, valueText: Int, progress: Int) {
 }
 
 @Composable
-private fun LobsterEditorDialog(
+private fun RoleDialog(
     title: String,
     initialName: String,
     initialPrompt: String,
@@ -305,6 +332,7 @@ private fun LobsterEditorDialog(
 ) {
     var name by remember(initialName) { mutableStateOf(initialName) }
     var prompt by remember(initialPrompt) { mutableStateOf(initialPrompt) }
+
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
@@ -322,7 +350,7 @@ private fun LobsterEditorDialog(
                     onValueChange = { prompt = it },
                     label = { Text("角色 Prompt") },
                     minLines = 4,
-                    maxLines = 8
+                    maxLines = 10
                 )
             }
         },
@@ -330,16 +358,25 @@ private fun LobsterEditorDialog(
             Button(
                 onClick = { onSave(name, prompt) },
                 enabled = name.isNotBlank() || !nameEnabled
-            ) { Text("保存") }
+            ) {
+                Text("保存")
+            }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } }
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("取消")
+            }
+        }
     )
 }
 
 private fun experienceProgress(lobster: Lobster): Int {
     val completedLevels = (lobster.level - 1).coerceAtLeast(0)
-    val levelStartExp = completedLevels * 100 + 20 * completedLevels * (completedLevels - 1)
+    val levelStartExp =
+        completedLevels * 100 + 20 * completedLevels * (completedLevels - 1)
     val levelNeed = 100 + completedLevels * 40
     val inLevel = (lobster.experience - levelStartExp).coerceAtLeast(0)
-    return ((inLevel.toDouble() / levelNeed.coerceAtLeast(1)) * 100).toInt().coerceIn(0, 100)
+    return ((inLevel.toDouble() / levelNeed.coerceAtLeast(1)) * 100)
+        .toInt()
+        .coerceIn(0, 100)
 }

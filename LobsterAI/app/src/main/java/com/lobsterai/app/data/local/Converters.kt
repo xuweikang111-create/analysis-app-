@@ -3,6 +3,7 @@ package com.lobsterai.app.data.local
 import androidx.room.TypeConverter
 import com.lobsterai.app.domain.model.ChatRole
 import com.lobsterai.app.domain.model.KnowledgeType
+import com.lobsterai.app.domain.model.MemoryType
 import com.lobsterai.app.domain.model.ProviderType
 
 class Converters {
@@ -17,6 +18,12 @@ class Converters {
 
     @TypeConverter
     fun stringToKnowledgeType(value: String): KnowledgeType = KnowledgeType.valueOf(value)
+
+    @TypeConverter
+    fun memoryTypeToString(value: MemoryType): String = value.name
+
+    @TypeConverter
+    fun stringToMemoryType(value: String): MemoryType = MemoryType.valueOf(value)
 
     @TypeConverter
     fun providerTypeToString(value: ProviderType): String = value.name

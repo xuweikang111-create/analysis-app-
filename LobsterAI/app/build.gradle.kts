@@ -16,8 +16,8 @@ android {
         applicationId = "com.lobsterai.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 3
-        versionName = "1.2.0"
+        versionCode = 4
+        versionName = "1.3.0"
         vectorDrawables.useSupportLibrary = true
     }
 
@@ -92,4 +92,5 @@ dependencies {
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.coil.compose)
     implementation(libs.jsoup)
+    implementation(libs.pdfbox.android)
 }

@@ -37,6 +37,9 @@ interface ConversationDao {
     @Query("SELECT * FROM conversations WHERE lobsterId = :lobsterId ORDER BY updatedAt DESC")
     fun observeByLobster(lobsterId: Long): Flow<List<ConversationEntity>>
 
+    @Query("SELECT * FROM conversations WHERE lobsterId = :lobsterId AND title LIKE '%' || :query || '%' ORDER BY updatedAt DESC LIMIT :limit")
+    suspend fun searchByLobster(lobsterId: Long, query: String, limit: Int): List<ConversationEntity>
+
     @Query("SELECT * FROM conversations WHERE id = :id LIMIT 1")
     suspend fun getById(id: Long): ConversationEntity?
 
@@ -45,6 +48,9 @@ interface ConversationDao {
 
     @Update
     suspend fun update(entity: ConversationEntity)
+
+    @Query("UPDATE conversations SET title = :title, updatedAt = :time WHERE id = :id")
+    suspend fun rename(id: Long, title: String, time: Long = System.currentTimeMillis())
 
     @Query("UPDATE conversations SET updatedAt = :time WHERE id = :id")
     suspend fun touch(id: Long, time: Long = System.currentTimeMillis())
@@ -114,6 +120,30 @@ interface KnowledgeDao {
 
     @Delete
     suspend fun delete(entity: KnowledgeItemEntity)
+}
+
+@Dao
+interface MemoryDao {
+    @Query("SELECT * FROM memories ORDER BY importance DESC, updatedAt DESC")
+    fun observeAll(): Flow<List<MemoryEntity>>
+
+    @Query("SELECT * FROM memories ORDER BY updatedAt DESC LIMIT :limit")
+    suspend fun getRecent(limit: Int): List<MemoryEntity>
+
+    @Query("SELECT * FROM memories WHERE id = :id LIMIT 1")
+    suspend fun getById(id: Long): MemoryEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsert(entity: MemoryEntity): Long
+
+    @Query("UPDATE memories SET lastAccessedAt = :time WHERE id IN (:ids)")
+    suspend fun touch(ids: List<Long>, time: Long = System.currentTimeMillis())
+
+    @Delete
+    suspend fun delete(entity: MemoryEntity)
+
+    @Query("DELETE FROM memories")
+    suspend fun clearAll()
 }
 
 @Dao

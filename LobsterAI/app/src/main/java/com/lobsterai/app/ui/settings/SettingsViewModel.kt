@@ -24,27 +24,38 @@ class SettingsViewModel @Inject constructor(
     private val availableModels = MutableStateFlow<List<String>>(emptyList())
     private val fetchingModels = MutableStateFlow(false)
 
-    private val preferences = combine(
+    private val basicPrefs = combine(
         settingsStore.darkMode,
         settingsStore.clipboardDetection,
         settingsStore.thinkingEnabled,
         settingsStore.visionEnabled,
         settingsStore.autoKnowledgeEnabled
     ) { dark, clipboard, thinking, vision, autoKnowledge ->
-        PreferenceState(dark, clipboard, thinking, vision, autoKnowledge)
+        BasicPrefs(dark, clipboard, thinking, vision, autoKnowledge)
     }
 
-    private val modelProbe = combine(availableModels, fetchingModels) { models, fetching ->
-        ModelProbeState(models, fetching)
+    private val extraPrefs = combine(
+        settingsStore.privacyMode,
+        settingsStore.responseStyle
+    ) { privacyMode, responseStyle ->
+        ExtraPrefs(privacyMode, responseStyle)
+    }
+
+    private val probeState = combine(
+        availableModels,
+        fetchingModels,
+        operationMessage
+    ) { models, fetching, message ->
+        ProbeState(models, fetching, message)
     }
 
     val state: StateFlow<SettingsUiState> = combine(
         repository.observeModelConfigs(),
         settingsStore.activeModelId,
-        preferences,
-        modelProbe,
-        operationMessage
-    ) { configs, activeId, prefs, probe, message ->
+        basicPrefs,
+        extraPrefs,
+        probeState
+    ) { configs, activeId, prefs, extra, probe ->
         SettingsUiState(
             configs = configs,
             activeModelId = activeId,
@@ -53,20 +64,58 @@ class SettingsViewModel @Inject constructor(
             thinkingEnabled = prefs.thinkingEnabled,
             visionEnabled = prefs.visionEnabled,
             autoKnowledgeEnabled = prefs.autoKnowledgeEnabled,
+            privacyMode = extra.privacyMode,
+            responseStyle = extra.responseStyle,
             availableModels = probe.models,
             fetchingModels = probe.fetching,
-            message = message
+            message = probe.message
         )
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), SettingsUiState())
+    }.stateIn(
+        viewModelScope,
+        SharingStarted.WhileSubscribed(5_000),
+        SettingsUiState()
+    )
 
-    fun setDarkMode(enabled: Boolean) = viewModelScope.launch { settingsStore.setDarkMode(enabled) }
-    fun setClipboardDetection(enabled: Boolean) = viewModelScope.launch { settingsStore.setClipboardDetection(enabled) }
-    fun setThinkingEnabled(enabled: Boolean) = viewModelScope.launch { settingsStore.setThinkingEnabled(enabled) }
-    fun setVisionEnabled(enabled: Boolean) = viewModelScope.launch { settingsStore.setVisionEnabled(enabled) }
-    fun setAutoKnowledgeEnabled(enabled: Boolean) = viewModelScope.launch { settingsStore.setAutoKnowledgeEnabled(enabled) }
-    fun selectModel(id: Long) = viewModelScope.launch { settingsStore.setActiveModel(id) }
-    fun clearMessage() { operationMessage.value = null }
-    fun clearAvailableModels() { availableModels.value = emptyList() }
+    fun setDarkMode(enabled: Boolean) = viewModelScope.launch {
+        settingsStore.setDarkMode(enabled)
+    }
+
+    fun setClipboardDetection(enabled: Boolean) = viewModelScope.launch {
+        settingsStore.setClipboardDetection(enabled)
+    }
+
+    fun setThinkingEnabled(enabled: Boolean) = viewModelScope.launch {
+        settingsStore.setThinkingEnabled(enabled)
+    }
+
+    fun setVisionEnabled(enabled: Boolean) = viewModelScope.launch {
+        settingsStore.setVisionEnabled(enabled)
+    }
+
+    fun setAutoKnowledgeEnabled(enabled: Boolean) = viewModelScope.launch {
+        settingsStore.setAutoKnowledgeEnabled(enabled)
+    }
+
+    fun setPrivacyMode(enabled: Boolean) = viewModelScope.launch {
+        settingsStore.setPrivacyMode(enabled)
+        if (enabled) settingsStore.setActiveConversation(null)
+    }
+
+    fun setResponseStyle(style: String) = viewModelScope.launch {
+        settingsStore.setResponseStyle(style)
+    }
+
+    fun selectModel(id: Long) = viewModelScope.launch {
+        settingsStore.setActiveModel(id)
+    }
+
+    fun clearMessage() {
+        operationMessage.value = null
+    }
+
+    fun clearAvailableModels() {
+        availableModels.value = emptyList()
+    }
 
     fun save(draft: ModelConfigDraft) = viewModelScope.launch {
         runCatching {
@@ -83,26 +132,34 @@ class SettingsViewModel @Inject constructor(
             )
             settingsStore.setActiveModel(id)
             operationMessage.value = "模型配置已保存"
-        }.onFailure { operationMessage.value = "保存失败：${it.message}" }
+        }.onFailure {
+            operationMessage.value = "保存失败：${it.message}"
+        }
     }
 
     fun delete(config: ModelConfig) = viewModelScope.launch {
         repository.deleteModelConfig(config)
-        if (state.value.activeModelId == config.id) settingsStore.setActiveModel(null)
+        if (state.value.activeModelId == config.id) {
+            settingsStore.setActiveModel(null)
+        }
         operationMessage.value = "模型配置已删除"
     }
 
     fun test(config: ModelConfig, apiKeyOverride: String? = null) = viewModelScope.launch {
         operationMessage.value = "正在测试连接…"
-        val result = repository.testModelConnection(config, apiKeyOverride)
-        operationMessage.value = result.fold(
-            onSuccess = { it },
-            onFailure = { "连接失败：${it.message ?: it.javaClass.simpleName}" }
+        repository.testModelConnection(config, apiKeyOverride).fold(
+            onSuccess = { operationMessage.value = it },
+            onFailure = {
+                operationMessage.value =
+                    "连接失败：${it.message ?: it.javaClass.simpleName}"
+            }
         )
     }
 
     fun testDraft(draft: ModelConfigDraft) {
-        val existing = draft.id?.let { id -> state.value.configs.firstOrNull { it.id == id } }
+        val existing = draft.id?.let { id ->
+            state.value.configs.firstOrNull { it.id == id }
+        }
         val temp = ModelConfig(
             id = draft.id ?: 0,
             name = draft.name.ifBlank { "临时配置" },
@@ -123,27 +180,35 @@ class SettingsViewModel @Inject constructor(
         if (fetchingModels.value) return
         if (!draft.baseUrl.startsWith("https://")) return
         if (draft.apiKey.isBlank() && draft.id == null) return
+
         viewModelScope.launch {
             fetchingModels.value = true
             if (announce) operationMessage.value = "正在自动获取模型列表…"
             try {
-                val result = repository.fetchModels(
+                repository.fetchModels(
                     existingConfigId = draft.id,
                     provider = draft.provider,
                     baseUrl = draft.baseUrl,
                     apiKeyOverride = draft.apiKey.takeIf { it.isNotBlank() },
                     customHeadersJson = draft.customHeadersJson
-                )
-                result.fold(
+                ).fold(
                     onSuccess = { models ->
                         availableModels.value = models
                         if (announce) {
-                            operationMessage.value = if (models.isEmpty()) "连接成功，但没有返回模型列表" else "已获取 ${models.size} 个模型"
+                            operationMessage.value =
+                                if (models.isEmpty()) {
+                                    "连接成功，但没有返回模型列表"
+                                } else {
+                                    "已获取 ${models.size} 个模型"
+                                }
                         }
                     },
                     onFailure = {
                         availableModels.value = emptyList()
-                        if (announce) operationMessage.value = "获取模型失败：${it.message ?: it.javaClass.simpleName}"
+                        if (announce) {
+                            operationMessage.value =
+                                "获取模型失败：${it.message ?: it.javaClass.simpleName}"
+                        }
                     }
                 )
             } finally {
@@ -161,6 +226,8 @@ data class SettingsUiState(
     val thinkingEnabled: Boolean = false,
     val visionEnabled: Boolean = true,
     val autoKnowledgeEnabled: Boolean = true,
+    val privacyMode: Boolean = false,
+    val responseStyle: String = "默认",
     val availableModels: List<String> = emptyList(),
     val fetchingModels: Boolean = false,
     val message: String? = null
@@ -178,7 +245,7 @@ data class ModelConfigDraft(
     val temperature: Double = 0.7
 )
 
-private data class PreferenceState(
+private data class BasicPrefs(
     val darkMode: Boolean,
     val clipboardDetection: Boolean,
     val thinkingEnabled: Boolean,
@@ -186,7 +253,13 @@ private data class PreferenceState(
     val autoKnowledgeEnabled: Boolean
 )
 
-private data class ModelProbeState(
+private data class ExtraPrefs(
+    val privacyMode: Boolean,
+    val responseStyle: String
+)
+
+private data class ProbeState(
     val models: List<String>,
-    val fetching: Boolean
+    val fetching: Boolean,
+    val message: String?
 )

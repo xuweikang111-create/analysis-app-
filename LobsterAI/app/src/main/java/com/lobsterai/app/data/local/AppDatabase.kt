@@ -11,9 +11,10 @@ import androidx.room.TypeConverters
         MessageEntity::class,
         ModelConfigEntity::class,
         KnowledgeItemEntity::class,
+        MemoryEntity::class,
         DailyActionEntity::class
     ],
-    version = 2,
+    version = 3,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -23,5 +24,6 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun messageDao(): MessageDao
     abstract fun modelConfigDao(): ModelConfigDao
     abstract fun knowledgeDao(): KnowledgeDao
+    abstract fun memoryDao(): MemoryDao
     abstract fun dailyActionDao(): DailyActionDao
 }

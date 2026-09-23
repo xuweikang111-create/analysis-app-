@@ -6,6 +6,7 @@ import androidx.room.Index
 import androidx.room.PrimaryKey
 import com.lobsterai.app.domain.model.ChatRole
 import com.lobsterai.app.domain.model.KnowledgeType
+import com.lobsterai.app.domain.model.MemoryType
 import com.lobsterai.app.domain.model.ProviderType
 
 @Entity(tableName = "lobsters")
@@ -90,6 +91,28 @@ data class KnowledgeItemEntity(
     val description: String? = null,
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis()
+)
+
+@Entity(
+    tableName = "memories",
+    indices = [
+        Index(value = ["fingerprint"], unique = true),
+        Index("updatedAt"),
+        Index("sourceConversationId")
+    ]
+)
+data class MemoryEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val type: MemoryType,
+    val title: String,
+    val content: String,
+    val importance: Int,
+    val fingerprint: String,
+    val vector: String,
+    val sourceConversationId: Long? = null,
+    val createdAt: Long = System.currentTimeMillis(),
+    val updatedAt: Long = System.currentTimeMillis(),
+    val lastAccessedAt: Long = System.currentTimeMillis()
 )
 
 @Entity(

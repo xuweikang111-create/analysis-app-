@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.longPreferencesKey
+import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
@@ -26,6 +27,8 @@ class SettingsStore @Inject constructor(
         val thinkingEnabled = booleanPreferencesKey("thinking_enabled")
         val visionEnabled = booleanPreferencesKey("vision_enabled")
         val autoKnowledgeEnabled = booleanPreferencesKey("auto_knowledge_enabled")
+        val privacyMode = booleanPreferencesKey("privacy_mode")
+        val responseStyle = stringPreferencesKey("response_style")
     }
 
     val activeLobsterId: Flow<Long?> = context.dataStore.data.map { it[Keys.activeLobster] }
@@ -36,6 +39,8 @@ class SettingsStore @Inject constructor(
     val thinkingEnabled: Flow<Boolean> = context.dataStore.data.map { it[Keys.thinkingEnabled] ?: false }
     val visionEnabled: Flow<Boolean> = context.dataStore.data.map { it[Keys.visionEnabled] ?: true }
     val autoKnowledgeEnabled: Flow<Boolean> = context.dataStore.data.map { it[Keys.autoKnowledgeEnabled] ?: true }
+    val privacyMode: Flow<Boolean> = context.dataStore.data.map { it[Keys.privacyMode] ?: false }
+    val responseStyle: Flow<String> = context.dataStore.data.map { it[Keys.responseStyle] ?: "默认" }
 
     suspend fun setActiveLobster(id: Long?) = context.dataStore.edit { prefs ->
         if (id == null) prefs.remove(Keys.activeLobster) else prefs[Keys.activeLobster] = id
@@ -54,4 +59,6 @@ class SettingsStore @Inject constructor(
     suspend fun setThinkingEnabled(enabled: Boolean) = context.dataStore.edit { it[Keys.thinkingEnabled] = enabled }
     suspend fun setVisionEnabled(enabled: Boolean) = context.dataStore.edit { it[Keys.visionEnabled] = enabled }
     suspend fun setAutoKnowledgeEnabled(enabled: Boolean) = context.dataStore.edit { it[Keys.autoKnowledgeEnabled] = enabled }
+    suspend fun setPrivacyMode(enabled: Boolean) = context.dataStore.edit { it[Keys.privacyMode] = enabled }
+    suspend fun setResponseStyle(style: String) = context.dataStore.edit { it[Keys.responseStyle] = style }
 }

@@ -20,6 +20,18 @@ enum class KnowledgeType {
     MEMORY
 }
 
+enum class MemoryType {
+    PROFILE,
+    PREFERENCE,
+    PROJECT,
+    DECISION,
+    GOAL,
+    FACT,
+    TODO,
+    RELATIONSHIP,
+    OTHER
+}
+
 data class Lobster(
     val id: Long = 0,
     val name: String,
@@ -75,6 +87,27 @@ data class KnowledgeItem(
     val description: String?,
     val createdAt: Long,
     val updatedAt: Long
+)
+
+data class Memory(
+    val id: Long = 0,
+    val type: MemoryType,
+    val title: String,
+    val content: String,
+    val importance: Int,
+    val fingerprint: String,
+    val vector: String,
+    val sourceConversationId: Long?,
+    val createdAt: Long,
+    val updatedAt: Long,
+    val lastAccessedAt: Long
+)
+
+data class RagHit(
+    val title: String,
+    val content: String,
+    val source: String,
+    val score: Double
 )
 
 data class WebPageContent(
