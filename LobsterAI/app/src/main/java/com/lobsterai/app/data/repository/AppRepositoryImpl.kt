@@ -29,7 +29,6 @@ import java.time.LocalDate
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.math.max
-import kotlin.math.min
 
 @Singleton
 class AppRepositoryImpl @Inject constructor(
@@ -102,6 +101,7 @@ class AppRepositoryImpl @Inject constructor(
         temperature: Double
     ): Long {
         require(baseUrl.trim().startsWith("https://")) { "API Base URL 必须使用 HTTPS" }
+        require(modelName.isNotBlank()) { "Model Name 不能为空" }
         val existing = existingId?.let { db.modelConfigDao().getById(it) }
         val keyRef = if (apiKey.isNotBlank()) vault.put(apiKey.trim(), existing?.apiKeyRef) else existing?.apiKeyRef
             ?: error("API Key 不能为空")
@@ -134,15 +134,62 @@ class AppRepositoryImpl @Inject constructor(
         aiGateway.test(config, key)
     }
 
-    override fun streamChat(config: ModelConfig, messages: List<Message>, apiKeyOverride: String?): Flow<String> {
+    override suspend fun fetchModels(
+        existingConfigId: Long?,
+        provider: ProviderType,
+        baseUrl: String,
+        apiKeyOverride: String?,
+        customHeadersJson: String
+    ): Result<List<String>> = withContext(Dispatchers.IO) {
+        runCatching {
+            require(baseUrl.trim().startsWith("https://")) { "API Base URL 必须使用 HTTPS" }
+            val existing = existingConfigId?.let { db.modelConfigDao().getById(it) }
+            val key = apiKeyOverride?.takeIf { it.isNotBlank() }
+                ?: existing?.apiKeyRef?.let(vault::get)
+                ?: error("请先填写 API Key")
+            val probe = ModelConfig(
+                id = existingConfigId ?: 0,
+                name = existing?.name ?: "模型探测",
+                provider = provider,
+                baseUrl = baseUrl.trim().trimEnd('/'),
+                modelName = existing?.modelName.orEmpty(),
+                apiKeyRef = existing?.apiKeyRef.orEmpty(),
+                customHeadersJson = customHeadersJson.ifBlank { "{}" },
+                systemPrompt = existing?.systemPrompt.orEmpty(),
+                temperature = existing?.temperature ?: 0.7,
+                enabled = true,
+                createdAt = existing?.createdAt ?: System.currentTimeMillis()
+            )
+            aiGateway.fetchModels(probe, key).getOrThrow()
+        }
+    }
+
+    override fun streamChat(
+        config: ModelConfig,
+        messages: List<Message>,
+        apiKeyOverride: String?,
+        thinkingEnabled: Boolean,
+        visionEnabled: Boolean
+    ): Flow<String> {
         val key = apiKeyOverride?.takeIf { it.isNotBlank() } ?: vault.get(config.apiKeyRef)
-        return aiGateway.stream(config, key, messages)
+        return aiGateway.stream(config, key, messages, thinkingEnabled, visionEnabled)
     }
 
     override fun observeKnowledge(): Flow<List<KnowledgeItem>> = db.knowledgeDao().observeAll().map { list -> list.map { it.toDomain() } }
 
+    override suspend fun getRecentKnowledge(limit: Int): List<KnowledgeItem> =
+        db.knowledgeDao().getRecent(limit.coerceIn(1, 200)).map { it.toDomain() }
+
     override suspend fun saveKnowledge(type: KnowledgeType, title: String, content: String, sourceUrl: String?, description: String?): Long =
-        db.knowledgeDao().insert(KnowledgeItemEntity(type = type, title = title.ifBlank { "未命名" }, sourceUrl = sourceUrl, content = content, description = description))
+        db.knowledgeDao().insert(
+            KnowledgeItemEntity(
+                type = type,
+                title = title.ifBlank { "未命名" },
+                sourceUrl = sourceUrl,
+                content = content,
+                description = description
+            )
+        )
 
     override suspend fun deleteKnowledge(item: KnowledgeItem) = db.knowledgeDao().delete(item.toEntity())
     override suspend fun fetchWebPage(url: String): Result<WebPageContent> = runCatching { webExtractor.fetch(url) }
@@ -174,7 +221,16 @@ class AppRepositoryImpl @Inject constructor(
 
     private fun Lobster.toEntity() = LobsterEntity(id, name, prompt, level, experience, mood, satiety, intimacy, createdAt)
     private fun Conversation.toEntity() = ConversationEntity(id, lobsterId, title, modelConfigId, createdAt, updatedAt)
-    private fun Message.toEntity() = MessageEntity(id, conversationId, role, content, createdAt, inputTokens, outputTokens)
+    private fun Message.toEntity() = MessageEntity(
+        id = id,
+        conversationId = conversationId,
+        role = role,
+        content = content,
+        imageUri = imageUri,
+        createdAt = createdAt,
+        inputTokens = inputTokens,
+        outputTokens = outputTokens
+    )
     private fun ModelConfig.toEntity() = ModelConfigEntity(id, name, provider, baseUrl, modelName, apiKeyRef, customHeadersJson, systemPrompt, temperature, enabled, createdAt)
     private fun KnowledgeItem.toEntity() = KnowledgeItemEntity(id, type, title, sourceUrl, content, description, createdAt, updatedAt)
 }

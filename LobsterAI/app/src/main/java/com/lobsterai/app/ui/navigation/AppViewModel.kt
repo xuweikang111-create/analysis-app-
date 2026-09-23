@@ -26,7 +26,7 @@ class AppViewModel @Inject constructor(
             if (lobsters.isEmpty()) {
                 val id = repository.createLobster(
                     name = "洛洛",
-                    prompt = "你是一只聪明、克制、可靠的AI龙虾伙伴。回答准确、自然，不要用廉价卖萌语气。"
+                    prompt = "你是米奇里的聪明、克制、可靠的 AI 伙伴。你会结合本地智识记忆持续理解用户。回答准确、自然，不要廉价卖萌。"
                 )
                 settingsStore.setActiveLobster(id)
             } else if (current == null || lobsters.none { it.id == current }) {

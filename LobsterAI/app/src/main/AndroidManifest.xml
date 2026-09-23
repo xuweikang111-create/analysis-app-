@@ -8,9 +8,9 @@
         android:allowBackup="true"
         android:fullBackupContent="@xml/backup_rules"
         android:dataExtractionRules="@xml/data_extraction_rules"
-        android:label="养龙虾 AI"
-        android:icon="@mipmap/ic_launcher"
-        android:roundIcon="@mipmap/ic_launcher_round"
+        android:label="@string/app_name"
+        android:icon="@drawable/crow_icon"
+        android:roundIcon="@drawable/crow_icon"
         android:supportsRtl="true"
         android:theme="@style/Theme.LobsterAI"
         android:usesCleartextTraffic="false">

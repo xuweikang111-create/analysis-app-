@@ -89,7 +89,7 @@ fun KnowledgeScreen(viewModel: KnowledgeViewModel = hiltViewModel()) {
         snackbarHost = { SnackbarHost(snackbar) },
         topBar = {
             TopAppBar(
-                title = { Text("知识库", fontWeight = FontWeight.SemiBold) },
+                title = { Text("智识库", fontWeight = FontWeight.SemiBold) },
                 actions = {
                     IconButton(onClick = { fileLauncher.launch(arrayOf("text/*", "application/json", "text/html", "application/xml")) }) { Icon(Icons.Outlined.UploadFile, contentDescription = "导入文件") }
                     IconButton(onClick = { noteDialog = true }) { Icon(Icons.Outlined.Add, contentDescription = "新建笔记") }
@@ -144,9 +144,9 @@ fun KnowledgeScreen(viewModel: KnowledgeViewModel = hiltViewModel()) {
                 }
             }
 
-            item { Text("本地知识", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold) }
+            item { Text("本地智识", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold) }
             if (state.items.isEmpty()) {
-                item { Text("还没有收藏。网页、笔记、文本文件和聊天资料都会保存在本机。", color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                item { Text("还没有智识。持续聊天后，米奇会自动把有用对话沉淀到这里；网页、笔记和文件也保存在本机。", color = MaterialTheme.colorScheme.onSurfaceVariant) }
             }
             items(state.items, key = { it.id }) { item ->
                 Card(onClick = { selected = item }, modifier = Modifier.fillMaxWidth()) {
@@ -154,7 +154,7 @@ fun KnowledgeScreen(viewModel: KnowledgeViewModel = hiltViewModel()) {
                         Icon(if (item.type == KnowledgeType.WEB) Icons.Outlined.Language else Icons.Outlined.Description, contentDescription = null)
                         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Text(item.title, fontWeight = FontWeight.SemiBold)
-                            Text(item.type.name, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                            Text(item.type.displayName(), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
                             Text(item.content.take(160), maxLines = 3, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                         IconButton(onClick = { viewModel.delete(item) }) { Icon(Icons.Outlined.DeleteOutline, contentDescription = "删除") }
@@ -205,4 +205,12 @@ private fun KnowledgeDetailDialog(
         confirmButton = { Button(onClick = { onAsk(question); onDismiss() }, enabled = question.isNotBlank()) { Text("向 AI 提问") } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("关闭") } }
     )
+}
+
+private fun KnowledgeType.displayName(): String = when (this) {
+    KnowledgeType.MEMORY -> "自动智识"
+    KnowledgeType.WEB -> "网页"
+    KnowledgeType.NOTE -> "笔记"
+    KnowledgeType.FILE -> "文件"
+    KnowledgeType.CHAT -> "聊天记录"
 }

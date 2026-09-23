@@ -86,7 +86,7 @@ class KnowledgeViewModel @Inject constructor(
                     currentWeb.value = page
                     if (save) {
                         repository.saveKnowledge(KnowledgeType.WEB, page.title, page.text, page.url, page.description)
-                        status.value = "网页已保存到知识库"
+                        status.value = "网页已保存到智识库"
                     } else {
                         status.value = "正文提取完成"
                     }
@@ -222,7 +222,7 @@ class KnowledgeViewModel @Inject constructor(
             return@launch
         }
         repository.saveKnowledge(KnowledgeType.FILE, fileName.ifBlank { "导入文件" }, content.take(500_000))
-        status.value = "文件已导入知识库"
+        status.value = "文件已导入智识库"
     }
 
     fun delete(item: KnowledgeItem) = viewModelScope.launch {

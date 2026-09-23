@@ -44,9 +44,23 @@ interface AppRepository {
     ): Long
     suspend fun deleteModelConfig(config: ModelConfig)
     suspend fun testModelConnection(config: ModelConfig, apiKeyOverride: String? = null): Result<String>
-    fun streamChat(config: ModelConfig, messages: List<Message>, apiKeyOverride: String? = null): Flow<String>
+    suspend fun fetchModels(
+        existingConfigId: Long?,
+        provider: ProviderType,
+        baseUrl: String,
+        apiKeyOverride: String?,
+        customHeadersJson: String
+    ): Result<List<String>>
+    fun streamChat(
+        config: ModelConfig,
+        messages: List<Message>,
+        apiKeyOverride: String? = null,
+        thinkingEnabled: Boolean = false,
+        visionEnabled: Boolean = true
+    ): Flow<String>
 
     fun observeKnowledge(): Flow<List<KnowledgeItem>>
+    suspend fun getRecentKnowledge(limit: Int = 50): List<KnowledgeItem>
     suspend fun saveKnowledge(type: KnowledgeType, title: String, content: String, sourceUrl: String? = null, description: String? = null): Long
     suspend fun deleteKnowledge(item: KnowledgeItem)
     suspend fun fetchWebPage(url: String): Result<WebPageContent>

@@ -67,9 +67,9 @@ fun HomeScreen(
             TopAppBar(
                 title = {
                     Column {
-                        Text("养龙虾 AI", fontWeight = FontWeight.SemiBold)
+                        Text("米奇", fontWeight = FontWeight.SemiBold)
                         Text(
-                            "你的本地 AI 伙伴",
+                            "会成长、会记住你的 AI 伙伴",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )

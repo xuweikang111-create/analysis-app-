@@ -103,6 +103,9 @@ interface KnowledgeDao {
     @Query("SELECT * FROM knowledge_items WHERE id = :id LIMIT 1")
     suspend fun getById(id: Long): KnowledgeItemEntity?
 
+    @Query("SELECT * FROM knowledge_items ORDER BY updatedAt DESC LIMIT :limit")
+    suspend fun getRecent(limit: Int): List<KnowledgeItemEntity>
+
     @Insert
     suspend fun insert(entity: KnowledgeItemEntity): Long
 

@@ -16,7 +16,8 @@ enum class KnowledgeType {
     WEB,
     NOTE,
     FILE,
-    CHAT
+    CHAT,
+    MEMORY
 }
 
 data class Lobster(
@@ -45,6 +46,7 @@ data class Message(
     val conversationId: Long,
     val role: ChatRole,
     val content: String,
+    val imageUri: String? = null,
     val createdAt: Long,
     val inputTokens: Int = 0,
     val outputTokens: Int = 0

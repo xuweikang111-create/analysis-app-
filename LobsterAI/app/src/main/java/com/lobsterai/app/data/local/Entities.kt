@@ -59,6 +59,7 @@ data class MessageEntity(
     val conversationId: Long,
     val role: ChatRole,
     val content: String,
+    val imageUri: String? = null,
     val createdAt: Long = System.currentTimeMillis(),
     val inputTokens: Int = 0,
     val outputTokens: Int = 0

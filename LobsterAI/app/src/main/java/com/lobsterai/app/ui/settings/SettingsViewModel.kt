@@ -21,21 +21,52 @@ class SettingsViewModel @Inject constructor(
     private val settingsStore: SettingsStore
 ) : ViewModel() {
     private val operationMessage = MutableStateFlow<String?>(null)
+    private val availableModels = MutableStateFlow<List<String>>(emptyList())
+    private val fetchingModels = MutableStateFlow(false)
+
+    private val preferences = combine(
+        settingsStore.darkMode,
+        settingsStore.clipboardDetection,
+        settingsStore.thinkingEnabled,
+        settingsStore.visionEnabled,
+        settingsStore.autoKnowledgeEnabled
+    ) { dark, clipboard, thinking, vision, autoKnowledge ->
+        PreferenceState(dark, clipboard, thinking, vision, autoKnowledge)
+    }
+
+    private val modelProbe = combine(availableModels, fetchingModels) { models, fetching ->
+        ModelProbeState(models, fetching)
+    }
 
     val state: StateFlow<SettingsUiState> = combine(
         repository.observeModelConfigs(),
         settingsStore.activeModelId,
-        settingsStore.darkMode,
-        settingsStore.clipboardDetection,
+        preferences,
+        modelProbe,
         operationMessage
-    ) { configs, activeId, dark, clipboard, message ->
-        SettingsUiState(configs, activeId, dark, clipboard, message)
+    ) { configs, activeId, prefs, probe, message ->
+        SettingsUiState(
+            configs = configs,
+            activeModelId = activeId,
+            darkMode = prefs.darkMode,
+            clipboardDetection = prefs.clipboardDetection,
+            thinkingEnabled = prefs.thinkingEnabled,
+            visionEnabled = prefs.visionEnabled,
+            autoKnowledgeEnabled = prefs.autoKnowledgeEnabled,
+            availableModels = probe.models,
+            fetchingModels = probe.fetching,
+            message = message
+        )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), SettingsUiState())
 
     fun setDarkMode(enabled: Boolean) = viewModelScope.launch { settingsStore.setDarkMode(enabled) }
     fun setClipboardDetection(enabled: Boolean) = viewModelScope.launch { settingsStore.setClipboardDetection(enabled) }
+    fun setThinkingEnabled(enabled: Boolean) = viewModelScope.launch { settingsStore.setThinkingEnabled(enabled) }
+    fun setVisionEnabled(enabled: Boolean) = viewModelScope.launch { settingsStore.setVisionEnabled(enabled) }
+    fun setAutoKnowledgeEnabled(enabled: Boolean) = viewModelScope.launch { settingsStore.setAutoKnowledgeEnabled(enabled) }
     fun selectModel(id: Long) = viewModelScope.launch { settingsStore.setActiveModel(id) }
     fun clearMessage() { operationMessage.value = null }
+    fun clearAvailableModels() { availableModels.value = emptyList() }
 
     fun save(draft: ModelConfigDraft) = viewModelScope.launch {
         runCatching {
@@ -74,7 +105,7 @@ class SettingsViewModel @Inject constructor(
         val existing = draft.id?.let { id -> state.value.configs.firstOrNull { it.id == id } }
         val temp = ModelConfig(
             id = draft.id ?: 0,
-            name = draft.name,
+            name = draft.name.ifBlank { "临时配置" },
             provider = draft.provider,
             baseUrl = draft.baseUrl,
             modelName = draft.modelName,
@@ -87,6 +118,39 @@ class SettingsViewModel @Inject constructor(
         )
         test(temp, draft.apiKey.takeIf { it.isNotBlank() })
     }
+
+    fun fetchModels(draft: ModelConfigDraft, announce: Boolean = true) {
+        if (fetchingModels.value) return
+        if (!draft.baseUrl.startsWith("https://")) return
+        if (draft.apiKey.isBlank() && draft.id == null) return
+        viewModelScope.launch {
+            fetchingModels.value = true
+            if (announce) operationMessage.value = "正在自动获取模型列表…"
+            try {
+                val result = repository.fetchModels(
+                    existingConfigId = draft.id,
+                    provider = draft.provider,
+                    baseUrl = draft.baseUrl,
+                    apiKeyOverride = draft.apiKey.takeIf { it.isNotBlank() },
+                    customHeadersJson = draft.customHeadersJson
+                )
+                result.fold(
+                    onSuccess = { models ->
+                        availableModels.value = models
+                        if (announce) {
+                            operationMessage.value = if (models.isEmpty()) "连接成功，但没有返回模型列表" else "已获取 ${models.size} 个模型"
+                        }
+                    },
+                    onFailure = {
+                        availableModels.value = emptyList()
+                        if (announce) operationMessage.value = "获取模型失败：${it.message ?: it.javaClass.simpleName}"
+                    }
+                )
+            } finally {
+                fetchingModels.value = false
+            }
+        }
+    }
 }
 
 data class SettingsUiState(
@@ -94,6 +158,11 @@ data class SettingsUiState(
     val activeModelId: Long? = null,
     val darkMode: Boolean = false,
     val clipboardDetection: Boolean = true,
+    val thinkingEnabled: Boolean = false,
+    val visionEnabled: Boolean = true,
+    val autoKnowledgeEnabled: Boolean = true,
+    val availableModels: List<String> = emptyList(),
+    val fetchingModels: Boolean = false,
     val message: String? = null
 )
 
@@ -107,4 +176,17 @@ data class ModelConfigDraft(
     val customHeadersJson: String = "{}",
     val systemPrompt: String = "",
     val temperature: Double = 0.7
+)
+
+private data class PreferenceState(
+    val darkMode: Boolean,
+    val clipboardDetection: Boolean,
+    val thinkingEnabled: Boolean,
+    val visionEnabled: Boolean,
+    val autoKnowledgeEnabled: Boolean
+)
+
+private data class ModelProbeState(
+    val models: List<String>,
+    val fetching: Boolean
 )

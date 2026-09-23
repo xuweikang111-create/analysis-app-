@@ -23,13 +23,19 @@ class SettingsStore @Inject constructor(
         val activeModel = longPreferencesKey("active_model")
         val darkMode = booleanPreferencesKey("dark_mode")
         val clipboardDetection = booleanPreferencesKey("clipboard_detection")
+        val thinkingEnabled = booleanPreferencesKey("thinking_enabled")
+        val visionEnabled = booleanPreferencesKey("vision_enabled")
+        val autoKnowledgeEnabled = booleanPreferencesKey("auto_knowledge_enabled")
     }
 
-    val activeLobsterId: Flow<Long?> = context.dataStore.data.map { prefs -> prefs[Keys.activeLobster] }
-    val activeConversationId: Flow<Long?> = context.dataStore.data.map { prefs -> prefs[Keys.activeConversation] }
-    val activeModelId: Flow<Long?> = context.dataStore.data.map { prefs -> prefs[Keys.activeModel] }
-    val darkMode: Flow<Boolean> = context.dataStore.data.map { prefs -> prefs[Keys.darkMode] ?: false }
-    val clipboardDetection: Flow<Boolean> = context.dataStore.data.map { prefs -> prefs[Keys.clipboardDetection] ?: true }
+    val activeLobsterId: Flow<Long?> = context.dataStore.data.map { it[Keys.activeLobster] }
+    val activeConversationId: Flow<Long?> = context.dataStore.data.map { it[Keys.activeConversation] }
+    val activeModelId: Flow<Long?> = context.dataStore.data.map { it[Keys.activeModel] }
+    val darkMode: Flow<Boolean> = context.dataStore.data.map { it[Keys.darkMode] ?: false }
+    val clipboardDetection: Flow<Boolean> = context.dataStore.data.map { it[Keys.clipboardDetection] ?: true }
+    val thinkingEnabled: Flow<Boolean> = context.dataStore.data.map { it[Keys.thinkingEnabled] ?: false }
+    val visionEnabled: Flow<Boolean> = context.dataStore.data.map { it[Keys.visionEnabled] ?: true }
+    val autoKnowledgeEnabled: Flow<Boolean> = context.dataStore.data.map { it[Keys.autoKnowledgeEnabled] ?: true }
 
     suspend fun setActiveLobster(id: Long?) = context.dataStore.edit { prefs ->
         if (id == null) prefs.remove(Keys.activeLobster) else prefs[Keys.activeLobster] = id
@@ -45,4 +51,7 @@ class SettingsStore @Inject constructor(
 
     suspend fun setDarkMode(enabled: Boolean) = context.dataStore.edit { it[Keys.darkMode] = enabled }
     suspend fun setClipboardDetection(enabled: Boolean) = context.dataStore.edit { it[Keys.clipboardDetection] = enabled }
+    suspend fun setThinkingEnabled(enabled: Boolean) = context.dataStore.edit { it[Keys.thinkingEnabled] = enabled }
+    suspend fun setVisionEnabled(enabled: Boolean) = context.dataStore.edit { it[Keys.visionEnabled] = enabled }
+    suspend fun setAutoKnowledgeEnabled(enabled: Boolean) = context.dataStore.edit { it[Keys.autoKnowledgeEnabled] = enabled }
 }

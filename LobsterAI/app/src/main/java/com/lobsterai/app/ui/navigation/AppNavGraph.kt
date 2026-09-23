@@ -43,7 +43,7 @@ private data class Tab(
 private val tabs = listOf(
     Tab("home", "首页", Icons.Outlined.Home),
     Tab("chat", "聊天", Icons.Outlined.ChatBubbleOutline),
-    Tab("knowledge", "知识库", Icons.Outlined.Storage),
+    Tab("knowledge", "智识", Icons.Outlined.Storage),
     Tab("settings", "设置", Icons.Outlined.Settings)
 )
 

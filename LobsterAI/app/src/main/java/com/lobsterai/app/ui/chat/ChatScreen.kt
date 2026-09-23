@@ -3,6 +3,8 @@ package com.lobsterai.app.ui.chat
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -10,6 +12,7 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -26,9 +29,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.BookmarkAdd
+import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Send
@@ -36,12 +41,14 @@ import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Stop
 import androidx.compose.material.icons.outlined.Upload
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledIconButton
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -64,11 +71,13 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import coil.compose.AsyncImage
 import com.lobsterai.app.domain.model.ChatRole
 import com.lobsterai.app.domain.model.Message
 import com.lobsterai.app.ui.components.MarkdownContent
@@ -86,31 +95,30 @@ fun ChatScreen(
     val snackbar = remember { SnackbarHostState() }
     val listState = rememberLazyListState()
     var input by remember { mutableStateOf("") }
+    var selectedImage by remember { mutableStateOf<Uri?>(null) }
     var conversationMenu by remember { mutableStateOf(false) }
     var modelMenu by remember { mutableStateOf(false) }
-    var overflowMenu by remember { mutableStateOf(false) }
+    var moreMenu by remember { mutableStateOf(false) }
     var editTarget by remember { mutableStateOf<Message?>(null) }
 
-    val exportLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.CreateDocument("application/json")
-    ) { uri ->
+    val imageLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) {
-            scope.launch {
-                val text = viewModel.exportConversation()
-                context.contentResolver.openOutputStream(uri)?.bufferedWriter()?.use { it.write(text) }
+            runCatching {
+                context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
+            selectedImage = uri
         }
     }
-
-    val importLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.OpenDocument()
-    ) { uri ->
+    val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) {
-            val text = context.contentResolver.openInputStream(uri)
-                ?.bufferedReader()
-                ?.use { it.readText() }
-                .orEmpty()
+            val text = context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }.orEmpty()
             viewModel.importConversation(text)
+        }
+    }
+    val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+        if (uri != null) scope.launch {
+            val text = viewModel.exportConversation()
+            context.contentResolver.openOutputStream(uri)?.bufferedWriter()?.use { it.write(text) }
         }
     }
 
@@ -118,12 +126,14 @@ fun ChatScreen(
         val count = state.messages.size + if (state.streamingText.isNotBlank()) 1 else 0
         if (count > 0) listState.animateScrollToItem(count - 1)
     }
-
     LaunchedEffect(state.error) {
         state.error?.let {
             snackbar.showSnackbar(it)
             viewModel.dismissError()
         }
+    }
+    LaunchedEffect(state.visionEnabled) {
+        if (!state.visionEnabled) selectedImage = null
     }
 
     Scaffold(
@@ -132,18 +142,11 @@ fun ChatScreen(
             TopAppBar(
                 title = {
                     Column {
+                        Text("米奇", fontWeight = FontWeight.SemiBold)
                         Text(
-                            state.lobster?.name ?: "AI 聊天",
-                            fontWeight = FontWeight.SemiBold
-                        )
-                        Text(
-                            state.selectedConfig?.name ?: "尚未配置模型",
+                            "${state.lobster?.name ?: "AI 伙伴"} · ${state.selectedConfig?.name ?: "尚未配置模型"}",
                             style = MaterialTheme.typography.labelSmall,
-                            color = if (state.selectedConfig == null) {
-                                MaterialTheme.colorScheme.error
-                            } else {
-                                MaterialTheme.colorScheme.onSurfaceVariant
-                            }
+                            color = if (state.selectedConfig == null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 },
@@ -152,38 +155,26 @@ fun ChatScreen(
                         Icon(Icons.Outlined.Add, contentDescription = "新会话")
                     }
                     Box {
-                        IconButton(onClick = { overflowMenu = true }) {
+                        IconButton(onClick = { moreMenu = true }) {
                             Icon(Icons.Outlined.MoreVert, contentDescription = "更多")
                         }
-                        DropdownMenu(
-                            expanded = overflowMenu,
-                            onDismissRequest = { overflowMenu = false }
-                        ) {
+                        DropdownMenu(expanded = moreMenu, onDismissRequest = { moreMenu = false }) {
                             DropdownMenuItem(
-                                text = { Text("保存到知识库") },
-                                leadingIcon = { Icon(Icons.Outlined.BookmarkAdd, contentDescription = null) },
+                                text = { Text("保存完整会话到智识库") },
+                                leadingIcon = { Icon(Icons.Outlined.BookmarkAdd, null) },
                                 enabled = state.messages.isNotEmpty(),
-                                onClick = {
-                                    overflowMenu = false
-                                    viewModel.saveConversationToKnowledge()
-                                }
+                                onClick = { moreMenu = false; viewModel.saveConversationToKnowledge() }
                             )
                             DropdownMenuItem(
                                 text = { Text("导入会话") },
-                                leadingIcon = { Icon(Icons.Outlined.Upload, contentDescription = null) },
-                                onClick = {
-                                    overflowMenu = false
-                                    importLauncher.launch(arrayOf("application/json", "text/plain"))
-                                }
+                                leadingIcon = { Icon(Icons.Outlined.Upload, null) },
+                                onClick = { moreMenu = false; importLauncher.launch(arrayOf("application/json", "text/plain")) }
                             )
                             DropdownMenuItem(
                                 text = { Text("导出会话") },
-                                leadingIcon = { Icon(Icons.Outlined.Download, contentDescription = null) },
+                                leadingIcon = { Icon(Icons.Outlined.Download, null) },
                                 enabled = state.selectedConversationId != null,
-                                onClick = {
-                                    overflowMenu = false
-                                    exportLauncher.launch("lobster-chat.json")
-                                }
+                                onClick = { moreMenu = false; exportLauncher.launch("miqi-chat.json") }
                             )
                         }
                     }
@@ -198,87 +189,71 @@ fun ChatScreen(
                 .imePadding()
         ) {
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Box(modifier = Modifier.weight(1f)) {
-                    OutlinedButton(
-                        onClick = { conversationMenu = true },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text(
-                            state.conversations
-                                .firstOrNull { it.id == state.selectedConversationId }
-                                ?.title
-                                ?: "新会话",
-                            maxLines = 1
-                        )
+                Box(Modifier.weight(1f)) {
+                    OutlinedButton(onClick = { conversationMenu = true }, modifier = Modifier.fillMaxWidth()) {
+                        Text(state.conversations.firstOrNull { it.id == state.selectedConversationId }?.title ?: "新会话", maxLines = 1)
                     }
-                    DropdownMenu(
-                        expanded = conversationMenu,
-                        onDismissRequest = { conversationMenu = false }
-                    ) {
+                    DropdownMenu(expanded = conversationMenu, onDismissRequest = { conversationMenu = false }) {
                         if (state.conversations.isEmpty()) {
-                            DropdownMenuItem(
-                                text = { Text("暂无历史会话") },
-                                enabled = false,
-                                onClick = {}
-                            )
+                            DropdownMenuItem(text = { Text("暂无历史会话") }, enabled = false, onClick = {})
                         } else {
                             state.conversations.forEach { conversation ->
                                 DropdownMenuItem(
                                     text = { Text(conversation.title, maxLines = 1) },
-                                    onClick = {
-                                        viewModel.selectConversation(conversation.id)
-                                        conversationMenu = false
-                                    },
-                                    trailingIcon = {
-                                        IconButton(onClick = { viewModel.deleteConversation(conversation) }) {
-                                            Icon(Icons.Outlined.DeleteOutline, contentDescription = "删除会话")
-                                        }
-                                    }
+                                    onClick = { viewModel.selectConversation(conversation.id); conversationMenu = false }
                                 )
                             }
                         }
                     }
                 }
-
-                Box(modifier = Modifier.weight(1f)) {
+                Box(Modifier.weight(1f)) {
                     OutlinedButton(
-                        onClick = {
-                            if (state.configs.isEmpty()) onOpenSettings() else modelMenu = true
-                        },
+                        onClick = { if (state.configs.isEmpty()) onOpenSettings() else modelMenu = true },
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Text(state.selectedConfig?.name ?: "配置模型", maxLines = 1)
                     }
-                    DropdownMenu(
-                        expanded = modelMenu,
-                        onDismissRequest = { modelMenu = false }
-                    ) {
+                    DropdownMenu(expanded = modelMenu, onDismissRequest = { modelMenu = false }) {
                         state.configs.forEach { config ->
                             DropdownMenuItem(
                                 text = { Text(config.name, maxLines = 1) },
-                                onClick = {
-                                    viewModel.selectModel(config.id)
-                                    modelMenu = false
-                                }
+                                onClick = { viewModel.selectModel(config.id); modelMenu = false }
                             )
                         }
                     }
                 }
             }
 
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 2.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                FilterChip(
+                    selected = state.thinkingEnabled,
+                    onClick = { viewModel.setThinkingEnabled(!state.thinkingEnabled) },
+                    label = { Text("思考") }
+                )
+                FilterChip(
+                    selected = state.visionEnabled,
+                    onClick = { viewModel.setVisionEnabled(!state.visionEnabled) },
+                    label = { Text("视觉") }
+                )
+                FilterChip(
+                    selected = state.autoKnowledgeEnabled,
+                    onClick = { viewModel.setAutoKnowledgeEnabled(!state.autoKnowledgeEnabled) },
+                    label = { Text("自动智识") }
+                )
+            }
+
             HorizontalDivider()
 
             LazyColumn(
                 state = listState,
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth(),
-                contentPadding = androidx.compose.foundation.layout.PaddingValues(12.dp),
+                modifier = Modifier.weight(1f).fillMaxWidth(),
+                contentPadding = PaddingValues(12.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 if (state.messages.isEmpty() && state.streamingText.isBlank()) {
@@ -286,11 +261,12 @@ fun ChatScreen(
                         EmptyChatCard(
                             lobsterName = state.lobster?.name,
                             hasModel = state.selectedConfig != null,
+                            visionEnabled = state.visionEnabled,
+                            autoKnowledge = state.autoKnowledgeEnabled,
                             onOpenSettings = onOpenSettings
                         )
                     }
                 }
-
                 items(state.messages, key = { it.id }) { message ->
                     MessageBubble(
                         message = message,
@@ -302,7 +278,6 @@ fun ChatScreen(
                         }
                     )
                 }
-
                 if (state.streamingText.isNotBlank()) {
                     item("streaming") {
                         Surface(
@@ -310,65 +285,87 @@ fun ChatScreen(
                             color = MaterialTheme.colorScheme.surfaceContainerHigh,
                             modifier = Modifier.widthIn(max = 680.dp)
                         ) {
-                            MarkdownContent(
-                                state.streamingText,
-                                Modifier.padding(horizontal = 14.dp, vertical = 12.dp)
-                            )
+                            Column(Modifier.padding(14.dp)) {
+                                if (state.thinkingEnabled) {
+                                    Text("思考模式", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                                }
+                                MarkdownContent(state.streamingText)
+                            }
                         }
                     }
                 }
             }
 
             if (state.messages.any { it.role == ChatRole.ASSISTANT } && !state.generating) {
-                TextButton(
-                    onClick = viewModel::regenerate,
-                    modifier = Modifier.align(Alignment.CenterHorizontally)
-                ) {
-                    Icon(Icons.Outlined.Refresh, contentDescription = null)
+                TextButton(onClick = viewModel::regenerate, modifier = Modifier.align(Alignment.CenterHorizontally)) {
+                    Icon(Icons.Outlined.Refresh, null)
                     Spacer(Modifier.size(6.dp))
                     Text("重新生成")
                 }
             }
 
-            Surface(
-                tonalElevation = 2.dp,
-                modifier = Modifier.fillMaxWidth()
-            ) {
+            selectedImage?.let { uri ->
+                Card(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
+                    shape = RoundedCornerShape(18.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        AsyncImage(
+                            model = uri,
+                            contentDescription = "待发送图片",
+                            modifier = Modifier.size(72.dp),
+                            contentScale = ContentScale.Crop
+                        )
+                        Column(Modifier.weight(1f)) {
+                            Text("图片已附加", fontWeight = FontWeight.SemiBold)
+                            Text("将使用当前模型视觉能力", style = MaterialTheme.typography.bodySmall)
+                        }
+                        IconButton(onClick = { selectedImage = null }) {
+                            Icon(Icons.Outlined.Close, contentDescription = "移除图片")
+                        }
+                    }
+                }
+            }
+
+            Surface(tonalElevation = 2.dp, modifier = Modifier.fillMaxWidth()) {
                 Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 10.dp),
                     verticalAlignment = Alignment.Bottom,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
+                    IconButton(
+                        onClick = { imageLauncher.launch(arrayOf("image/*")) },
+                        enabled = state.visionEnabled && !state.generating
+                    ) {
+                        Icon(Icons.Outlined.Image, contentDescription = "添加图片")
+                    }
                     OutlinedTextField(
                         value = input,
                         onValueChange = { input = it },
-                        placeholder = {
-                            Text(
-                                if (state.selectedConfig == null) "先配置模型，再开始聊天"
-                                else "给 ${state.lobster?.name ?: "AI"} 发消息…"
-                            )
-                        },
+                        placeholder = { Text(if (state.selectedConfig == null) "先配置模型" else "问米奇任何问题…") },
                         enabled = !state.generating,
-                        modifier = Modifier
-                            .weight(1f)
-                            .heightIn(min = 56.dp),
+                        modifier = Modifier.weight(1f).heightIn(min = 56.dp),
                         minLines = 1,
                         maxLines = 6,
                         shape = RoundedCornerShape(20.dp)
                     )
                     FilledIconButton(
                         onClick = {
-                            if (state.generating) {
-                                viewModel.stop()
-                            } else if (state.selectedConfig == null) {
-                                onOpenSettings()
-                            } else {
-                                viewModel.send(input)
-                                input = ""
+                            when {
+                                state.generating -> viewModel.stop()
+                                state.selectedConfig == null -> onOpenSettings()
+                                else -> {
+                                    viewModel.send(input, selectedImage?.toString())
+                                    input = ""
+                                    selectedImage = null
+                                }
                             }
-                        }
+                        },
+                        enabled = state.generating || state.selectedConfig == null || input.isNotBlank() || selectedImage != null
                     ) {
                         Icon(
                             when {
@@ -376,11 +373,7 @@ fun ChatScreen(
                                 state.selectedConfig == null -> Icons.Outlined.Settings
                                 else -> Icons.Outlined.Send
                             },
-                            contentDescription = when {
-                                state.generating -> "停止"
-                                state.selectedConfig == null -> "配置模型"
-                                else -> "发送"
-                            }
+                            contentDescription = null
                         )
                     }
                 }
@@ -407,9 +400,7 @@ fun ChatScreen(
                     editTarget = null
                 }) { Text("保存") }
             },
-            dismissButton = {
-                TextButton(onClick = { editTarget = null }) { Text("取消") }
-            }
+            dismissButton = { TextButton(onClick = { editTarget = null }) { Text("取消") } }
         )
     }
 }
@@ -418,25 +409,25 @@ fun ChatScreen(
 private fun EmptyChatCard(
     lobsterName: String?,
     hasModel: Boolean,
+    visionEnabled: Boolean,
+    autoKnowledge: Boolean,
     onOpenSettings: () -> Unit
 ) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(
-            Modifier.padding(18.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
+    Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(24.dp)) {
+        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
             Text(
                 if (lobsterName == null) "开始一段新对话" else "和 $lobsterName 开始聊天",
-                style = MaterialTheme.typography.titleMedium,
+                style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.SemiBold
             )
-            Text(
-                "支持上下文记忆、Markdown、代码高亮、流式输出、停止生成和重新生成。",
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            Text("米奇会保留上下文，并把长期聊天自动沉淀为本地智识。")
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                AssistChip(onClick = {}, label = { Text(if (visionEnabled) "视觉已开启" else "视觉已关闭") })
+                AssistChip(onClick = {}, label = { Text(if (autoKnowledge) "自动智识开启" else "自动智识暂停") })
+            }
             if (!hasModel) {
                 Button(onClick = onOpenSettings) {
-                    Icon(Icons.Outlined.Settings, contentDescription = null)
+                    Icon(Icons.Outlined.Settings, null)
                     Spacer(Modifier.size(6.dp))
                     Text("配置 AI 模型")
                 }
@@ -459,35 +450,31 @@ private fun MessageBubble(
         horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start
     ) {
         Surface(
-            modifier = Modifier
-                .widthIn(max = 680.dp)
-                .combinedClickable(onClick = {}, onLongClick = onCopy),
+            modifier = Modifier.widthIn(max = 680.dp).combinedClickable(onClick = {}, onLongClick = onCopy),
             shape = RoundedCornerShape(18.dp),
-            color = if (isUser) {
-                MaterialTheme.colorScheme.primaryContainer
-            } else {
-                MaterialTheme.colorScheme.surfaceContainerHigh
-            }
+            color = if (isUser) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh
         ) {
-            Column(
-                Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
+            Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                message.imageUri?.let { uri ->
+                    AsyncImage(
+                        model = uri,
+                        contentDescription = "聊天图片",
+                        modifier = Modifier.fillMaxWidth().heightIn(max = 280.dp),
+                        contentScale = ContentScale.Fit
+                    )
+                }
                 MarkdownContent(message.content)
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(2.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        "${if (isUser) "你" else "AI"} · ${message.inputTokens + message.outputTokens} tok",
+                        "${if (isUser) "你" else "米奇"} · ${message.inputTokens + message.outputTokens} tok",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     IconButton(onClick = onEdit, modifier = Modifier.size(32.dp)) {
-                        Icon(Icons.Outlined.Edit, contentDescription = "编辑")
+                        Icon(Icons.Outlined.Edit, "编辑")
                     }
                     IconButton(onClick = onDelete, modifier = Modifier.size(32.dp)) {
-                        Icon(Icons.Outlined.DeleteOutline, contentDescription = "删除")
+                        Icon(Icons.Outlined.DeleteOutline, "删除")
                     }
                 }
             }

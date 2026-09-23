@@ -1,28 +1,18 @@
-# 养龙虾 AI v1.1.0
+# 米奇 v1.2.0
 
-Android 原生 Kotlin + Jetpack Compose AI 伙伴应用。v1.1.0 以“接近 Kimi Claw 的简洁使用体验 + 能直接构建安装”为优先目标，在保留龙虾养成特色的同时收敛首页和聊天页。
+原生 Android AI 伙伴客户端。Kotlin + Jetpack Compose + MVVM/Clean Architecture。
 
-## v1.1.0 重点
+## v1.2.0
 
-- 首页改成 AI 伙伴控制台：角色切换、状态、今日互动、一键开始聊天。
-- 聊天页收敛顶部按钮，使用稳定的标准 `DropdownMenu`，降低 Material 3 实验 API 兼容风险。
-- 未配置模型时，聊天页直接引导到设置。
-- 保留多会话、流式输出、停止、重新生成、编辑、删除、复制、导入/导出、Token 近似统计。
-- 修复知识库 AI 总结/问答取消任务时被误报为失败的问题。
-- 修复 Gemini 自定义 Base URL 在 `/v1` 场景下错误拼接 `/v1/v1beta` 的问题。
-- 新增正式 adaptive launcher icon。
-- GitHub Actions 不再依赖项目自定义 Wrapper：Runner 安装 Gradle 8.13 + Android SDK 36 后直接构建 APK。
-
-## 核心能力
-
-- 龙虾养成：等级、经验、心情、饱食度、亲密度、多角色、自定义 Prompt、每日任务。
-- 模型接入：自定义 Base URL / API Key / Model Name / Header / System Prompt / Temperature。
-- 协议：OpenAI Compatible SSE、Claude 原生 SSE、Gemini 原生 SSE。
-- 预设：OpenAI / Claude / Gemini / DeepSeek / Kimi / Qwen / GLM。
-- 本地数据：Room + DataStore。
-- 安全：API Key 使用 Android Keystore AES-GCM，本地密文不参与云备份。
-- 分享：支持 Android `ACTION_SEND`，可接收微信/QQ/浏览器系统分享文本和网页链接。
-- 知识库：网页、笔记、文本文件、聊天记录；保留 `VectorStore` 扩展接口用于后续 RAG。
+- APP 名称改为 **米奇**。
+- Launcher 图标直接使用用户提供的原始乌鸦图片文件。
+- 视觉默认开启：聊天支持选择图片，并按 OpenAI Compatible / Claude / Gemini 多模态协议发送。
+- 新增思考开关：开启后向模型加入深度检查与推理摘要要求，不展示隐藏思维链。
+- 模型自动发现：填写 API Base URL + API Key 后自动请求模型列表，也支持手动 Model Name。
+- 自动智识库默认开启：每轮聊天完成后自动沉淀本地长期记忆。
+- 后续聊天会从 MEMORY / NOTE / WEB 中做轻量相关性检索，并把相关记忆注入当前上下文。
+- 保留多会话、流式输出、停止、重新生成、编辑、删除、复制、聊天导入导出、网页抓取与 AI 总结。
+- API Key 继续使用 Android Keystore AES-GCM 本地加密保存。
 
 ## 构建环境
 
@@ -30,22 +20,8 @@ Android 原生 Kotlin + Jetpack Compose AI 伙伴应用。v1.1.0 以“接近 Ki
 - Gradle 8.13
 - Android Gradle Plugin 8.13.2
 - Kotlin 2.3.21
-- KSP 2.3.12
+- Hilt 2.58
 - compileSdk / targetSdk 36
-- minSdk 26（Android 8.0+）
+- minSdk 26
 
-## 构建 APK
-
-Android Studio 打开项目后使用 JDK 17 / SDK 36，执行：
-
-```bash
-./gradlew :app:assembleDebug
-```
-
-Debug APK：
-
-```text
-app/build/outputs/apk/debug/app-debug.apk
-```
-
-仓库 CI 使用 `.github/workflows/android.yml`，会自动安装 Gradle 8.13 和 Android SDK 36 后构建并上传 APK artifact。
+GitHub Actions 会执行 `gradle :app:assembleDebug` 并上传 APK artifact。
