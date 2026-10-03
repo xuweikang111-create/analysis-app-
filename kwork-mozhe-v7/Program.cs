@@ -214,8 +214,6 @@ public sealed class MainForm : Form
     {
         try
         {
-            _state.Endpoint = _endpoint.Text.Trim();
-            _state.Model = _model.Text.Trim();
             Directory.CreateDirectory(_appDir);
             File.WriteAllText(StatePath,
                 JsonSerializer.Serialize(_state, new JsonSerializerOptions { WriteIndented = true }),
