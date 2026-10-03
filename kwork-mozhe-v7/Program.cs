@@ -34,11 +34,13 @@ public sealed class MainForm : Form
     readonly TextBox _apiKey = new() { UseSystemPasswordChar = true };
     readonly TextBox _model = new() { Text = "kimi-k3" };
     readonly Label _status = new();
+    readonly Label _quotaValue = new() { Text = "未查询", AutoSize = false, TextAlign = ContentAlignment.MiddleLeft };
     readonly TextBox _log = new() { Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Vertical };
-    readonly Button _enable = new() { Text = "开启强制接管并重启 Kimi" };
-    readonly Button _disable = new() { Text = "关闭插件并恢复官方" };
-    readonly Button _launch = new() { Text = "启动 Kimi Work" };
-    readonly Button _test = new() { Text = "测试 MOZHE 接口" };
+    readonly Button _enable = new() { Text = "启动 Kimi Work" };
+    readonly Button _disable = new() { Text = "停止并恢复" };
+    readonly Button _launch = new() { Text = "查看日志" };
+    readonly Button _test = new() { Text = "测试 API 连接" };
+    readonly Button _quota = new() { Text = "查询额度" };
     readonly NotifyIcon _tray = new();
     System.Threading.Timer? _watchdog;
     AppState _state = new();
@@ -48,13 +50,13 @@ public sealed class MainForm : Form
     {
         Directory.CreateDirectory(_appDir);
 
-        Text = "Kimi Work 3.2.15 - MOZHE 强制接管 v7";
-        Width = 760;
-        Height = 640;
-        MinimumSize = new Size(720, 600);
+        Text = "Kwork Quick - MOZHE";
+        Width = 650;
+        Height = 460;
+        MinimumSize = new Size(650, 460);
         StartPosition = FormStartPosition.CenterScreen;
         Font = new Font("Microsoft YaHei UI", 9F);
-        Icon = SystemIcons.Shield;
+        Icon = SystemIcons.Application;
 
         BuildUi();
         LoadState();
@@ -102,76 +104,127 @@ public sealed class MainForm : Form
 
     void BuildUi()
     {
+        BackColor = Color.White;
+        Text = "Kwork Quick - MOZHE";
+        Width = 650;
+        Height = 460;
+        MinimumSize = new Size(650, 460);
+        MaximumSize = new Size(650, 460);
+        MaximizeBox = false;
+
         var title = new Label
         {
-            Text = "Kimi Work 3.2.15 · MOZHE 全本地 Work 强制接管",
-            Font = new Font(Font.FontFamily, 15F, FontStyle.Bold),
+            Text = "Kimi Work 快捷接管",
+            Font = new Font("Microsoft YaHei UI", 16F, FontStyle.Bold),
+            ForeColor = Color.FromArgb(32, 32, 32),
             AutoSize = true,
-            Left = 24,
-            Top = 20
+            Left = 28,
+            Top = 22
         };
         Controls.Add(title);
 
-        var hint = new Label
+        var sub = new Label
         {
-            Text = "插件开启时：本地 Work 主 Agent、集群主 Agent、所有本地 Sub Agent 均强制走你的接口；接口异常时不主动回退官方模型。",
-            AutoSize = false,
-            Left = 25,
-            Top = 58,
-            Width = 690,
-            Height = 42
+            Text = "Kimi Work → MOZHE → kimi-k3",
+            Font = new Font("Microsoft YaHei UI", 9F),
+            ForeColor = Color.DimGray,
+            AutoSize = true,
+            Left = 30,
+            Top = 62
         };
-        Controls.Add(hint);
+        Controls.Add(sub);
 
-        AddLabel("API Base URL", 25, 112);
-        _endpoint.SetBounds(160, 108, 545, 28);
-        Controls.Add(_endpoint);
+        var line = new Label
+        {
+            BorderStyle = BorderStyle.Fixed3D,
+            Left = 28,
+            Top = 91,
+            Width = 575,
+            Height = 2
+        };
+        Controls.Add(line);
 
-        AddLabel("API Key", 25, 153);
-        _apiKey.SetBounds(160, 149, 545, 28);
+        AddLabel("API Key", 30, 116);
+        _apiKey.SetBounds(115, 110, 487, 30);
+        _apiKey.Font = new Font("Consolas", 10F);
         Controls.Add(_apiKey);
 
-        AddLabel("上游 Model ID", 25, 194);
-        _model.SetBounds(160, 190, 545, 28);
-        Controls.Add(_model);
-
-        _enable.SetBounds(25, 242, 255, 38);
-        _disable.SetBounds(292, 242, 205, 38);
-        _launch.SetBounds(509, 242, 196, 38);
-        Controls.AddRange(new Control[] { _enable, _disable, _launch });
-
-        _test.SetBounds(25, 292, 180, 34);
-        Controls.Add(_test);
-
-        _status.SetBounds(220, 294, 485, 34);
-        _status.Font = new Font(Font.FontFamily, 9.5F, FontStyle.Bold);
-        Controls.Add(_status);
-
-        var modeBox = new GroupBox
+        var apiText = new Label
         {
-            Text = "强制规则",
-            Left = 25,
-            Top = 340,
-            Width = 680,
-            Height = 105
+            Text = "请求地址",
+            AutoSize = true,
+            Left = 30,
+            Top = 160
         };
-        modeBox.Controls.Add(new Label
-        {
-            Left = 15, Top = 25, Width = 645, Height = 68,
-            Text = "1. 自动定位 Kimi Work 内嵌 kimi-code home，并备份 config.toml。\r\n" +
-                   "2. 所有已配置模型别名重定向到 MOZHE；default_model 固定到 MOZHE。\r\n" +
-                   "3. secondary_model.force = true，所有本地 Sub Agent 固定同一模型；Watchdog 防止配置被刷回。"
-        });
-        Controls.Add(modeBox);
+        Controls.Add(apiText);
 
-        _log.SetBounds(25, 462, 680, 120);
-        _log.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
-        Controls.Add(_log);
+        var apiValue = new Label
+        {
+            Text = "https://api.mozhe.world/v1",
+            AutoSize = true,
+            Left = 115,
+            Top = 160,
+            ForeColor = Color.FromArgb(55, 90, 160)
+        };
+        Controls.Add(apiValue);
+
+        var quotaText = new Label
+        {
+            Text = "剩余额度",
+            AutoSize = true,
+            Left = 30,
+            Top = 197
+        };
+        Controls.Add(quotaText);
+
+        _quotaValue.SetBounds(115, 188, 350, 32);
+        _quotaValue.Font = new Font("Microsoft YaHei UI", 10F, FontStyle.Bold);
+        _quotaValue.ForeColor = Color.FromArgb(33, 99, 55);
+        Controls.Add(_quotaValue);
+
+        _quota.SetBounds(492, 186, 110, 34);
+        Controls.Add(_quota);
+
+        _test.SetBounds(30, 244, 130, 38);
+        _enable.SetBounds(172, 244, 168, 38);
+        _disable.SetBounds(352, 244, 130, 38);
+        _launch.SetBounds(494, 244, 108, 38);
+        Controls.AddRange(new Control[] { _test, _enable, _disable, _launch });
+
+        var statusBox = new GroupBox
+        {
+            Text = "运行状态",
+            Left = 30,
+            Top = 300,
+            Width = 572,
+            Height = 86
+        };
+        _status.SetBounds(18, 27, 535, 44);
+        _status.Font = new Font("Microsoft YaHei UI", 9.5F, FontStyle.Bold);
+        statusBox.Controls.Add(_status);
+        Controls.Add(statusBox);
+
+        var foot = new Label
+        {
+            Text = "插件开启期间：本地 Work / 集群主 Agent / 本地 Sub Agent 强制走你的额度；只有点击“停止并恢复”才恢复官方配置。",
+            Left = 30,
+            Top = 401,
+            Width = 572,
+            Height = 34,
+            ForeColor = Color.Firebrick,
+            Font = new Font("Microsoft YaHei UI", 8.5F)
+        };
+        Controls.Add(foot);
+
+        _log.Visible = false;
+        _endpoint.Visible = false;
+        _model.Visible = false;
 
         _enable.Click += async (_, _) => await EnableAsync();
         _disable.Click += async (_, _) => await DisableAsync();
-        _launch.Click += (_, _) => LaunchKimi();
+        _launch.Click += (_, _) => OpenLog();
         _test.Click += async (_, _) => await TestEndpointAsync();
+        _quota.Click += async (_, _) => await QueryQuotaAsync();
     }
 
     void AddLabel(string text, int x, int y)
@@ -375,7 +428,10 @@ public sealed class MainForm : Form
 
             Log($"接口测试 GET /models -> {(int)resp.StatusCode} {resp.ReasonPhrase}");
             if (resp.IsSuccessStatusCode)
-                MessageBox.Show("接口连接成功。\r\n\r\n" + preview, AppName, MessageBoxButtons.OK, MessageBoxIcon.Information);
+                {
+                    MessageBox.Show("接口连接成功。\r\n\r\n" + preview, AppName, MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    await QueryQuotaAsync();
+                }
             else
                 MessageBox.Show($"接口返回 {(int)resp.StatusCode}。\r\n{preview}", AppName, MessageBoxButtons.OK, MessageBoxIcon.Warning);
         }
@@ -387,6 +443,95 @@ public sealed class MainForm : Form
         finally
         {
             _test.Enabled = true;
+        }
+    }
+
+    async Task QueryQuotaAsync()
+    {
+        _quota.Enabled = false;
+        try
+        {
+            var key = _apiKey.Text.Trim();
+            if (string.IsNullOrWhiteSpace(key))
+                throw new InvalidOperationException("请先填写 API Key。");
+
+            using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(12) };
+            http.DefaultRequestHeaders.Authorization =
+                new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", key);
+            http.DefaultRequestHeaders.TryAddWithoutValidation("X-API-Key", key);
+
+            var resp = await http.GetAsync("https://ai.mozhe.world/quota");
+            var body = (await resp.Content.ReadAsStringAsync()).Trim();
+            if (!resp.IsSuccessStatusCode)
+            {
+                _quotaValue.Text = $"查询失败 ({(int)resp.StatusCode})";
+                _quotaValue.ForeColor = Color.Firebrick;
+                Log($"额度查询失败 {(int)resp.StatusCode}: {body}");
+                return;
+            }
+
+            var text = FormatQuota(body);
+            _quotaValue.Text = text;
+            _quotaValue.ForeColor = Color.FromArgb(33, 99, 55);
+            Log("额度查询成功: " + text);
+        }
+        catch (Exception ex)
+        {
+            _quotaValue.Text = "查询失败";
+            _quotaValue.ForeColor = Color.Firebrick;
+            Log("额度查询失败: " + ex.Message);
+        }
+        finally
+        {
+            _quota.Enabled = true;
+        }
+    }
+
+    static string FormatQuota(string body)
+    {
+        if (string.IsNullOrWhiteSpace(body)) return "接口返回为空";
+        try
+        {
+            using var doc = JsonDocument.Parse(body);
+            var root = doc.RootElement;
+            string[] names = { "remaining", "quota", "balance", "left", "remaining_quota", "credits", "data" };
+            foreach (var name in names)
+            {
+                if (root.ValueKind == JsonValueKind.Object && root.TryGetProperty(name, out var v))
+                {
+                    if (v.ValueKind == JsonValueKind.Number || v.ValueKind == JsonValueKind.String)
+                        return v.ToString();
+                    if (v.ValueKind == JsonValueKind.Object)
+                    {
+                        foreach (var inner in names)
+                            if (v.TryGetProperty(inner, out var iv) &&
+                                (iv.ValueKind == JsonValueKind.Number || iv.ValueKind == JsonValueKind.String))
+                                return iv.ToString();
+                    }
+                }
+            }
+        }
+        catch { }
+
+        return body.Length > 80 ? body[..80] + "…" : body;
+    }
+
+    void OpenLog()
+    {
+        try
+        {
+            Directory.CreateDirectory(_appDir);
+            if (!File.Exists(LogPath))
+                File.WriteAllText(LogPath, "Kwork MOZHE v7 log" + Environment.NewLine, new UTF8Encoding(false));
+
+            Process.Start(new ProcessStartInfo("notepad.exe", $"\"{LogPath}\"")
+            {
+                UseShellExecute = true
+            });
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(ex.Message, "打开日志失败", MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
     }
 
