@@ -5,7 +5,7 @@
     <UseWindowsForms>true</UseWindowsForms>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <AssemblyName>Kwork_Quick_MOZHE_WORK_ALL_FORCE_v7</AssemblyName>
+    <AssemblyName>Kwork_Quick_MOZHE_WORK_FORCE_UI2_v8</AssemblyName>
     <RootNamespace>KworkMozheForce</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <PublishSingleFile>true</PublishSingleFile>
