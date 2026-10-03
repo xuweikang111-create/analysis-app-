@@ -1,0 +1,49 @@
+name: Build Kwork MOZHE v7
+
+on:
+  push:
+    branches:
+      - kwork-mozhe-v7-build
+    paths:
+      - 'kwork-mozhe-v7/**'
+      - '.github/workflows/kwork-mozhe-v7.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore
+        run: dotnet restore kwork-mozhe-v7/KworkMozheForce.csproj
+
+      - name: Publish single-file Windows x64
+        run: dotnet publish kwork-mozhe-v7/KworkMozheForce.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:PublishTrimmed=false -p:IncludeNativeLibrariesForSelfExtract=true -o out
+
+      - name: Verify output
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem out -Filter *.exe | Select-Object -First 1
+          if (-not $exe) { throw "No exe produced" }
+          Rename-Item $exe.FullName "Kwork_Quick_MOZHE_WORK_ALL_FORCE_v7.exe"
+          Get-FileHash "out/Kwork_Quick_MOZHE_WORK_ALL_FORCE_v7.exe" -Algorithm SHA256 | Format-List
+          Get-Item "out/Kwork_Quick_MOZHE_WORK_ALL_FORCE_v7.exe" | Format-List Name,Length
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Kwork_Quick_MOZHE_WORK_ALL_FORCE_v7
+          path: out/Kwork_Quick_MOZHE_WORK_ALL_FORCE_v7.exe
+          if-no-files-found: error
+          retention-days: 7
