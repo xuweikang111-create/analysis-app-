@@ -8802,7 +8802,12 @@ function RelayProfileDetail({
         ? addRelayProfile(form, normalizedDraft)
         : updateRelayProfile(form, profile.id, normalizedDraft));
       const settingsValidationError = relaySettingsValidation(next);
-      if (settingsValidationError) return;
+      if (settingsValidationError) {
+        void actions.showMessage(t("保存供应商"), settingsValidationError, "failed");
+        return;
+      }
+      // Persist provider data without requiring any installed Codex application.
+      // Model-route activation and desktop restart must be explicit operations.
       const activeLiveBaseUrl = codexBaseUrlFromConfig(
         relayFiles?.configContents ?? profile.configContents,
       );
@@ -8811,22 +8816,15 @@ function RelayProfileDetail({
         next,
         activeLiveBaseUrl,
       );
-      if (requiresRestart && !window.confirm(t("此请求设置需要启动本地协议代理。保存后将立即重启 Codex，使设置安全生效。是否继续？"))) {
-        return;
-      }
       const savedSettings = await onFormChange(next);
       if (!savedSettings) return;
-      if (requiresRestart) {
-        const restarted = await actions.restart(true);
-        if (!restarted) return;
-        onSaved?.();
-        return;
-      }
-      const savedProfile = savedSettings.relayProfiles.find((candidate) => candidate.id === normalizedDraft.id)
-        ?? normalizedDraft;
-      if (isActive && savedSettings.relayProfilesEnabled && relayProfileUsesLiveFiles(savedProfile)) {
-        await actions.switchRelayProfile(savedSettings, savedSettings.activeRelayId);
-      }
+      void actions.showMessage(
+        t("保存供应商"),
+        requiresRestart
+          ? t("供应商配置已保存。模型路由尚未应用，需要单独在 Codex 桌面版中启用；不会自动重启 ChatGPT。")
+          : t("供应商配置已保存。不会自动启动或修改 ChatGPT。"),
+        "ok",
+      );
       onSaved?.();
     } finally {
       setSavingDraft(false);
