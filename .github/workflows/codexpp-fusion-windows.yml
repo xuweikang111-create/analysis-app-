@@ -41,6 +41,7 @@ jobs:
         run: |
           $paths = @(
             'crates/codex-plus-core/src/ccs_import.rs',
+            'crates/codex-plus-core/src/global_dictation.rs',
             'apps/codex-plus-manager/src-tauri/src/commands.rs',
             'apps/codex-plus-manager/src-tauri/src/lib.rs',
             'apps/codex-plus-manager/src/App.tsx'
