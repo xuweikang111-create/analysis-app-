@@ -2890,7 +2890,25 @@ export function App() {
   const refreshAds = async (silent = false) => {
     const result = await run(() => call<AdsResult>("load_ads"));
     if (result) {
-      setAds(result);
+      // Fusion edition: local first-party recommendation. No remote sponsored card
+      // may replace this top placement. Other upstream recommendations remain intact.
+      const mozhe: AdItem = {
+        id: "fusion-mozhe-ai",
+        type: "sponsor",
+        title: "墨者 AI 中转站",
+        description: "墨者 AI 模型 API 服务平台。访问官网查看可用模型、账户与服务说明。",
+        url: "https://ai.mozhe.world/",
+        highlights: ["AI 中转服务", "模型管理", "开发者 API"],
+      };
+      const retainedAds = (result.ads ?? []).filter(
+        (ad) => !/jojocode|jojo[ -]?code/i.test(ad.title + " " + ad.url),
+      );
+      setAds({
+        ...result,
+        ads: [mozhe, ...retainedAds],
+        topAd: mozhe,
+        topAds: [mozhe],
+      });
       if (!silent) showResultNotice(t("推荐内容"), result, { silentSuccess: true });
     }
   };
