@@ -225,15 +225,22 @@ mod fusion_ccs_sync_tests {
         };
         let mut settings = crate::settings::BackendSettings::default();
         import_providers_with_origins(&mut settings, &source, &BTreeMap::new()).unwrap();
-        settings.relay_profiles[0].test_model = "my-model".into();
+        let linked_id = settings.ccs_import_sources.iter()
+            .find(|(_, origin)| origin.source_id == "a")
+            .map(|(id, _)| id.clone())
+            .expect("linked imported provider must exist");
+        let idx = settings.relay_profiles.iter()
+            .position(|p| p.id == linked_id)
+            .expect("linked imported profile must exist");
+        settings.relay_profiles[idx].test_model = "my-model".into();
         source.providers[0].base_url = "https://new.invalid/v1".into();
         source.providers[0].api_key = "secret-2".into();
         source.providers[0].protocol = RelayProtocol::ChatCompletions;
         let r = fusion_sync_linked_ccs(&mut settings, &source).unwrap();
         assert_eq!(r.changed, 1);
-        assert_eq!(settings.relay_profiles[0].test_model, "my-model");
-        assert_eq!(settings.relay_profiles[0].api_key, "secret-2");
-        assert_eq!(settings.relay_profiles[0].protocol, RelayProtocol::ChatCompletions);
+        assert_eq!(settings.relay_profiles[idx].test_model, "my-model");
+        assert_eq!(settings.relay_profiles[idx].api_key, "secret-2");
+        assert_eq!(settings.relay_profiles[idx].protocol, RelayProtocol::ChatCompletions);
     }
 }
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
