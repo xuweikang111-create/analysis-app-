@@ -1083,7 +1083,7 @@ const TOOL_ICONS: Record<string, string> = {
   claude: new URL("./assets/agents/claude.svg", import.meta.url).href,
 };
 
-type Route = "overview" | "relay" | "multiLaunch" | "grok" | "claude" | "relayEnvironment" | "sessions" | "context" | "skills" | "weixin" | "enhance" | "dreamSkin" | "userScripts" | "pluginMarket" | "recommendations" | "agentCache" | "agentCollaboration" | "maintenance" | "about" | "settings";
+type Route = "overview" | "relay" | "multiLaunch" | "grok" | "claude" | "relayEnvironment" | "sessions" | "context" | "skills" | "weixin" | "enhance" | "dreamSkin" | "userScripts" | "pluginMarket" | "agentCache" | "agentCollaboration" | "maintenance" | "about" | "settings";
 type Theme = "dark" | "light";
 
 const MANAGER_NAVIGATION_EVENT = "manager-navigation-requested";
@@ -1098,7 +1098,7 @@ const MANAGER_NAVIGATION_EVENT = "manager-navigation-requested";
  * 新增页面时**必须**想清楚归属：默认可见会让 Codex 专属功能在 Grok 下露出来。
  */
 const routes: Array<{ id: Route; label: string; icon: LucideIcon; badge?: string; tool?: string }> = [
-  // 概览在两个工具下都可见：它承载共用的置顶推荐位，以及各自的状态。
+  // 概览仅承载各工具的状态，不加载远程推荐或赞助卡片。
   { id: "overview", get label() { return t("概览"); }, icon: LayoutDashboard },
   { id: "relay", get label() { return t("供应商配置"); }, icon: KeyRound, tool: "codex" },
   { id: "multiLaunch", get label() { return t("Codex多开"); }, icon: Layers3, badge: "NEW", tool: "codex" },
@@ -1112,7 +1112,6 @@ const routes: Array<{ id: Route; label: string; icon: LucideIcon; badge?: string
   { id: "dreamSkin", get label() { return t("皮肤管理"); }, icon: Palette, tool: "codex" },
   { id: "userScripts", get label() { return t("拓展"); }, icon: FileCode2, tool: "codex" },
   { id: "pluginMarket", get label() { return t("Codex 插件市场"); }, icon: Store, tool: "codex" },
-  { id: "recommendations", get label() { return t("推荐内容"); }, icon: ExternalLink },
   // 缓存清理覆盖多个 AI 应用，属于应用级页面，在各工具下均可访问。
   { id: "agentCache", get label() { return t("AI Agent 缓存清理"); }, icon: Trash2 },
   // 跨客户端协作属于应用级能力，各工具下共用同一组任务。
@@ -1144,7 +1143,7 @@ const navigationSections: Array<{ label: string; routes: Route[]; placement?: "b
 ];
 
 /** 应用级入口放在最左栏；概览仍随当前 Agent 显示各自的状态。 */
-const globalNavigationRoutes: Route[] = ["recommendations", "agentCache", "agentCollaboration", "about", "settings"];
+const globalNavigationRoutes: Route[] = ["agentCache", "agentCollaboration", "about", "settings"];
 
 const defaultSettings: BackendSettings = {
   ...defaultWhaleBalanceSettings(),
@@ -1320,7 +1319,6 @@ export function App() {
     percent: 0,
     message: t("尚未运行安装包更新。"),
   });
-  const [ads, setAds] = useState<AdsResult | null>(null);
   const [scriptMarket, setScriptMarket] = useState<ScriptMarketResult | null>(null);
   const [launchForm, setLaunchForm] = useState({
     appPath: "",
@@ -2324,7 +2322,6 @@ export function App() {
       await refreshScriptMarket(true);
       await refreshUserScriptInventory();
     }
-    if (next === "recommendations") await refreshAds(true);
     if (next === "about") {
       await refreshOverview(true);
       await refreshLogs(true);
@@ -2887,32 +2884,6 @@ export function App() {
     }
   };
 
-  const refreshAds = async (silent = false) => {
-    const result = await run(() => call<AdsResult>("load_ads"));
-    if (result) {
-      // Fusion edition: local first-party recommendation. No remote sponsored card
-      // may replace this top placement. Other upstream recommendations remain intact.
-      const mozhe: AdItem = {
-        id: "fusion-mozhe-ai",
-        type: "sponsor",
-        title: "墨者 AI 中转站",
-        description: "墨者 AI 模型 API 服务平台。访问官网查看可用模型、账户与服务说明。",
-        url: "https://ai.mozhe.world/",
-        highlights: ["AI 中转服务", "模型管理", "开发者 API"],
-      };
-      const retainedAds = (result.ads ?? []).filter(
-        (ad) => !/jojocode|jojo[ -]?code/i.test(ad.title + " " + ad.url),
-      );
-      setAds({
-        ...result,
-        ads: [mozhe, ...retainedAds],
-        topAd: mozhe,
-        topAds: [mozhe],
-      });
-      if (!silent) showResultNotice(t("推荐内容"), result, { silentSuccess: true });
-    }
-  };
-
   const refreshProviderSyncTargets = async (silent = false) => {
     const result = await run(() => call<ProviderSyncTargetsResult>("load_provider_sync_targets"));
     if (result) {
@@ -3417,6 +3388,11 @@ export function App() {
     }
   };
 
+  const openChatGptDesktop = async () => {
+    const result = await run(() => call<CommandResult<Record<string, unknown>>>("launch_installed_chatgpt"));
+    if (result) showResultNotice(t("打开 ChatGPT 桌面版"), result);
+  };
+
   const openExternalUrl = async (url: string) => {
     const result = await run(() => call<CommandResult<Record<string, unknown>>>("open_external_url", { url }));
     if (result) {
@@ -3459,9 +3435,6 @@ export function App() {
         void checkUpdate(true);
       }
       await refreshOverview(true);
-      // 概览页的赞助商区块要显示真实广告源内容，所以启动就拉一次，
-      // 不要等到用户点进「推荐内容」才加载。
-      await refreshAds(true);
       if (!handledNavigation) await refreshSettings(true);
       await refreshRelay(true);
       await refreshEnvConflicts(true);
@@ -3729,6 +3702,7 @@ export function App() {
     () => ({
       refreshCurrent: () => navigate(route),
       launch,
+      openChatGptDesktop,
       launchMultiInstance,
       multiLaunchPending,
       multiLaunchInstances,
@@ -3883,7 +3857,6 @@ export function App() {
       fusionSyncCcsProviders,
       refreshLiveContextEntries,
       syncLiveContextEntries,
-      refreshAds,
       refreshScriptMarket,
       refreshUserScriptInventory,
       reloadUserScripts,
@@ -4004,33 +3977,19 @@ export function App() {
             <p>{routeSubtitle(route)}</p>
           </div>
           <div className="topbar-actions">
-            {activeTool === "codex" && !isGlobalPage ? (
-              <>
-                <span className="codex-app-state" aria-live="polite">
-                  <UiBadge
-                    className={statusClass(overview?.runtime_health?.codex_app?.status ?? "not_checked")}
-                    variant="secondary"
-                  >
-                    Codex {statusLabel(overview?.runtime_health?.codex_app?.status ?? "not_checked")}
-                  </UiBadge>
-                </span>
-                <Button
-                  disabled={launchPending || !overview?.runtime_health}
-                  onClick={() => void (codexAppRunning ? actions.restart() : actions.launch())}
-                  title={codexAppRunning ? t("重启 Codex") : t("启动 Codex")}
-                >
-                  <Rocket className="h-4 w-4" />
-                  {codexAppRunning ? t("重启 Codex") : t("启动 Codex")}
-                </Button>
-              </>
-            ) : null}
+            <Button
+              onClick={() => void actions.openChatGptDesktop()}
+              title={t("打开本机已安装的 ChatGPT 桌面版")}
+            >
+              <Rocket className="h-4 w-4" />
+              {t("打开 ChatGPT")}
+            </Button>
           </div>
         </header>
         <section className={`screen ${isManagementScreen ? "management-screen" : ""}`} key={route}>
           {route === "overview" ? (
             <OverviewScreen
               overview={overview}
-              ads={ads}
               activeTool={activeTool}
               toolEntries={toolEntries}
               actions={actions}
@@ -4147,7 +4106,6 @@ export function App() {
           ) : null}
           {route === "userScripts" ? <UserScriptsScreen settings={settings} market={scriptMarket} actions={actions} /> : null}
           {route === "pluginMarket" ? <PluginMarketScreen /> : null}
-          {route === "recommendations" ? <RecommendationsScreen ads={ads} actions={actions} /> : null}
           {route === "agentCache" ? <AgentCachePanel /> : null}
           {route === "agentCollaboration" ? <AgentCollaborationPage /> : null}
           {route === "maintenance" ? (
@@ -4402,6 +4360,7 @@ function ModelReasoningLevelsCell({
 type Actions = {
   refreshCurrent: () => Promise<void>;
   launch: () => Promise<void>;
+  openChatGptDesktop: () => Promise<void>;
   launchMultiInstance: (profile: RelayProfile) => Promise<void>;
   multiLaunchPending: string | null;
   multiLaunchInstances: MultiLaunchInstance[];
@@ -4461,7 +4420,6 @@ type Actions = {
   fusionSyncCcsProviders: () => Promise<void>;
   refreshLiveContextEntries: () => Promise<LiveContextEntriesResult | null>;
   syncLiveContextEntries: (settings: BackendSettings, silent?: boolean) => Promise<LiveContextEntriesResult | null>;
-  refreshAds: () => Promise<void>;
   refreshScriptMarket: () => Promise<void>;
   refreshUserScriptInventory: () => Promise<SettingsResult | null>;
   reloadUserScripts: () => Promise<void>;
@@ -4952,112 +4910,13 @@ function WeixinConnectScreen({
   );
 }
 
-/// 概览页的置顶推荐位。
-///
-/// 概览页和推荐内容页共用同一份数据、同一个渲染，所以两处看到的赞助商是
-/// 一致的 —— 以前概览页把赞助商内容硬编码在 JSX 里，跟推荐内容页各说各话。
-///
-/// 数据来自广告源里的 sponsor 条目。
-/// 概览页置顶赞助位。
-///
-/// 这个位置**不来自推荐池** —— 广告源里的 `top_ad` 可配置单个对象或数组，
-/// 多条时自动轮播。没有有效条目时不显示置顶赞助位。
-function SponsorBoard({ ads, actions }: { ads: AdsResult | null; actions: Actions }) {
-  const sourceAds = ads?.topAds?.length ? ads.topAds : ads?.topAd ? [ads.topAd] : [];
-  const featured = sourceAds.filter((ad) => !isExpiredAd(ad));
-  const [activeIndex, setActiveIndex] = useState(0);
-  const [hovered, setHovered] = useState(false);
-  const [focusWithin, setFocusWithin] = useState(false);
-  const paused = hovered || focusWithin;
-
-  useEffect(() => {
-    if (featured.length < 2 || paused) return;
-    const timer = window.setInterval(() => {
-      if (document.visibilityState === "visible") {
-        setActiveIndex((index) => (index + 1) % featured.length);
-      }
-    }, 6000);
-    return () => window.clearInterval(timer);
-  }, [featured.length, paused]);
-
-  if (featured.length === 0) return null;
-  const activePosition = activeIndex % featured.length;
-  const ad = featured[activePosition];
-  const move = (offset: number) => {
-    setActiveIndex((index) => (index + offset + featured.length) % featured.length);
-  };
-
-  return (
-    <div
-      className="sponsor-board"
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      onFocusCapture={() => setFocusWithin(true)}
-      onBlurCapture={(event) => {
-        if (!event.currentTarget.contains(event.relatedTarget)) setFocusWithin(false);
-      }}
-    >
-      <Panel className="jojocode-overview">
-        <CardContent>
-          <div className="jojocode-overview-layout">
-            <div className="jojocode-overview-main">
-              {ad.image ? (
-                <img alt="" className="sponsor-logo" src={ad.image} />
-              ) : (
-                <div className="jojocode-overview-mark">
-                  <Network className="h-5 w-5" />
-                </div>
-              )}
-              <div aria-live={paused ? "polite" : "off"} className="sponsor-carousel-copy" key={ad.id || ad.title}>
-                <span className="eyebrow">{t("推荐内容")}</span>
-                <h2>{formatAdTitle(ad.title)}</h2>
-                <p className="recommendation-description" title={ad.description}>{ad.description}</p>
-              </div>
-            </div>
-            <div className="jojocode-overview-side">
-              {ad.highlights?.length ? (
-                <div className="jojocode-model-tags">
-                  {ad.highlights.map((item) => (
-                    <span key={item}>{item}</span>
-                  ))}
-                </div>
-              ) : null}
-              <div className="sponsor-carousel-actions">
-                <Button onClick={() => void actions.openExternalUrl(ad.url)}>
-                  <ExternalLink className="h-4 w-4" />
-                  {t("打开推荐内容")}
-                </Button>
-                {featured.length > 1 ? (
-                  <div aria-label={t("赞助商轮播")} className="sponsor-carousel-controls" role="group">
-                    <Button aria-label={t("上一条")} onClick={() => move(-1)} size="icon" variant="outline">
-                      <ArrowLeft className="h-4 w-4" />
-                    </Button>
-                    <span aria-live={paused ? "polite" : "off"} className="sponsor-carousel-count">
-                      {activePosition + 1} / {featured.length}
-                    </span>
-                    <Button aria-label={t("下一条")} onClick={() => move(1)} size="icon" variant="outline">
-                      <ArrowRight className="h-4 w-4" />
-                    </Button>
-                  </div>
-                ) : null}
-              </div>
-            </div>
-          </div>
-        </CardContent>
-      </Panel>
-    </div>
-  );
-}
-
 function OverviewScreen({
   overview,
-  ads,
   activeTool,
   toolEntries,
   actions,
 }: {
   overview: OverviewResult | null;
-  ads: AdsResult | null;
   activeTool: ToolId;
   toolEntries: ToolEntry[];
   actions: Actions;
@@ -5066,8 +4925,6 @@ function OverviewScreen({
   const tool = toolEntries.find((entry) => entry.id === activeTool);
   return (
     <>
-      {/* 置顶推荐位两个工具下都显示，内容与「推荐内容」页同源。 */}
-      <SponsorBoard ads={ads} actions={actions} />
       {activeTool === "codex" ? (
         <>
           <Panel>
@@ -8015,54 +7872,6 @@ function SessionsScreen({
   );
 }
 
-/// 推荐内容页：列出广告源里的全部推荐（含 sponsor 与 normal）。
-///
-/// 概览页置顶位独立配置；展示多条时也从推荐池去重，避免重复出现。
-function RecommendationsScreen({ ads, actions }: { ads: AdsResult | null; actions: Actions }) {
-  const items = (ads?.ads ?? []).filter((ad) => !isExpiredAd(ad));
-  // 置顶位排在最前，并把推荐池里指向同一家的那条去掉 —— 广告源里同一条赞助商
-  // 常常同时出现在 top_ad 和 ads 里（两个 id、同一个落地页），只比 id 去不掉。
-  const topAds = (ads?.topAds?.length ? ads.topAds : ads?.topAd ? [ads.topAd] : []).filter((ad) => !isExpiredAd(ad));
-  const topIdentities = new Set(topAds.map(adIdentity));
-  const pool = items.filter((ad) => !topIdentities.has(adIdentity(ad)));
-  const ordered = [...topAds, ...pool];
-  const sponsors = ordered.filter((ad) => ad.type === "sponsor");
-  const normal = ordered.filter((ad) => ad.type === "normal");
-  return (
-    <>
-      <Panel>
-        <CardHead title={t("推荐内容")} detail={t("与 Codex 内插件菜单使用同一个远端广告源")} />
-        <CardContent>
-          <div className="recommend-hero">
-            <div>
-              <strong>{ads ? tf("已加载 {0} 条推荐", [ordered.length]) : t("尚未加载推荐内容")}</strong>
-              <span>{t("内容来自 BigPizzaV3/Ad-List，含置顶推荐与普通推荐。")}</span>
-            </div>
-            <Button onClick={() => void actions.refreshAds()}>
-              <RefreshCw className="h-4 w-4" />
-              {t("刷新推荐")}
-            </Button>
-          </div>
-        </CardContent>
-      </Panel>
-      {sponsors.length ? (
-        <Panel>
-          <CardHead title={t("赞助商推荐")} detail={tf("{0} 条", [sponsors.length])} />
-          <CardContent>
-            <AdGrid actions={actions} ads={sponsors} empty={t("暂无赞助商推荐。")} />
-          </CardContent>
-        </Panel>
-      ) : null}
-      <Panel>
-        <CardHead title={t("普通推荐")} detail={tf("{0} 条", [normal.length])} />
-        <CardContent>
-          <AdGrid actions={actions} ads={normal} empty={t("暂无普通推荐。")} />
-        </CardContent>
-      </Panel>
-    </>
-  );
-}
-
 function MaintenanceScreen({
   overview,
   launchPending,
@@ -8239,7 +8048,8 @@ function MaintenanceScreen({
               onChange={(event) => onLaunchFormChange({ ...launchForm, appPath: event.currentTarget.value })}
               placeholder={savedCodexAppPath || t("例如 C:\\Program Files\\WindowsApps\\OpenAI.Codex...\\app")}
             />
-            <p className="field-hint">{t("注意：ChatGPT（GPT）桌面版和 Codex 桌面版是不同的应用。这里需要选择 Codex.exe 或 OpenAI.Codex 的 app 目录，不能填写 ChatGPT.exe。若只安装了 ChatGPT，请先安装 Codex Desktop。")}</p>
+            <p className="field-hint">{t("你电脑上的 ChatGPT 可以用下方按钮直接启动；Codex 调试接管是另一项功能，ChatGPT 不保证支持。请勿将 ChatGPT.exe 当作 Codex.exe 配置。")}</p>
+            <Button variant="secondary" onClick={() => void actions.openChatGptDesktop()}>{t("打开已安装的 ChatGPT")}</Button>
             
           </Field>
           <div className="form-row">
@@ -13255,67 +13065,6 @@ function ScriptRow({ script, actions }: { script: NonNullable<UserScriptInventor
   );
 }
 
-function AdGrid({ ads, empty, actions }: { ads: AdItem[]; empty: string; actions: Actions }) {
-  if (!ads.length) return <div className="empty">{empty}</div>;
-  return (
-    <div className="ad-grid">
-      {ads.map((ad) => (
-        <button className="ad-card" key={ad.id || `${ad.type}-${ad.title}`} onClick={() => void actions.openExternalUrl(ad.url)} type="button">
-          {ad.image ? <img alt="" className="ad-image" src={ad.image} /> : null}
-          <div className="ad-content">
-            <strong>{formatAdTitle(ad.title)}</strong>
-            <p className="recommendation-description" title={ad.description}>{ad.description}</p>
-          </div>
-          {ad.highlights?.length ? (
-            <div className="ad-tags">
-              {ad.highlights.map((item) => (
-                <span key={item}>{item}</span>
-              ))}
-            </div>
-          ) : null}
-          <span className="ad-link">
-            {t("打开")}
-            <ExternalLink className="h-4 w-4" />
-          </span>
-        </button>
-      ))}
-    </div>
-  );
-}
-
-/// 广告标题原样展示。
-///
-/// 以前这里会在 `｜` / `|` 处截断，把「火山引擎｜方舟 Agent Plan」显示成
-/// 「火山引擎」—— 后半段是作者写的产品名，不该被我们悄悄丢掉。既然卡片
-/// 已经改成按内容自适应高度，就不再需要在标题上省这一点空间。
-function formatAdTitle(title: string) {
-  return title.trim() || title;
-}
-
-/// 广告的「同一家」判据。
-///
-/// 只比 id 是不够的：置顶位和推荐池里的同一条赞助商往往有两个 id
-/// （`jojocode-top` vs `jojocode-codex-relay`），但指向同一个去处。
-/// 所以按落地 URL（去 query / 尾斜杠）比，退回标题。
-function adIdentity(ad: AdItem): string {
-  const url = (ad.url || "").trim();
-  if (url) {
-    try {
-      const parsed = new URL(url);
-      return `${parsed.host}${parsed.pathname}`.replace(/\/+$/, "").toLowerCase();
-    } catch {
-      return url.replace(/[?#].*$/, "").replace(/\/+$/, "").toLowerCase();
-    }
-  }
-  return (ad.title || "").trim().toLowerCase();
-}
-
-function isExpiredAd(ad: AdItem) {
-  if (!ad.expires_at) return false;
-  const expiresAt = Date.parse(ad.expires_at);
-  return Number.isFinite(expiresAt) && expiresAt < Date.now();
-}
-
 function routeTitle(route: Route) {
   return routes.find((item) => item.id === route)?.label ?? t("概览");
 }
@@ -13336,7 +13085,6 @@ function routeSubtitle(route: Route) {
     dreamSkin: t("Codex-Dream-Skin 风格主题和换图"),
     userScripts: t("内置和用户自定义拓展清单"),
     pluginMarket: t("检索插件，按需下载并安装到 Codex"),
-    recommendations: t("普通推荐内容"),
     agentCache: t("扫描 Codex、Claude 与 Codex++ 的已知缓存目录，由你选择清理项目。"),
     agentCollaboration: t("连接 Codex、DeepSeek Harness 与 Claude Code，派发任务并查看结果。"),
     maintenance: t("入口检查与修复、开机启动与应用路径"),

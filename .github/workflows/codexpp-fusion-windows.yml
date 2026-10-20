@@ -113,7 +113,7 @@ jobs:
           if (!(Test-Path $nsis)) { throw 'makensis.exe not found' }
           Push-Location scripts/installer/windows
           try {
-            & $nsis /INPUTCHARSET UTF8 /DVERSION=1.10.0-fusion.5 CodexPlusPlus.nsi
+            & $nsis /INPUTCHARSET UTF8 /DVERSION=1.10.0-fusion.6 CodexPlusPlus.nsi
             if ($LASTEXITCODE -ne 0) { throw 'NSIS installer compilation failed' }
           } finally { Pop-Location }
 

@@ -6198,6 +6198,70 @@ fn persist_repo_skill_cache(cache: &RepoSkillCache) {
     }
 }
 
+
+// Opens the user's installed official ChatGPT Desktop. This does not attempt
+// Codex CDP injection or change OpenAI credentials/configuration.
+#[tauri::command]
+pub async fn launch_installed_chatgpt() -> CommandResult<Value> {
+    #[cfg(windows)]
+    {
+        match tauri::async_runtime::spawn_blocking(launch_installed_chatgpt_windows).await {
+            Ok(Ok(message)) => ok(&message, json!({ "app": "ChatGPT" })),
+            Ok(Err(error)) => failed(&format!("无法启动 ChatGPT：{error}"), json!({})),
+            Err(error) => failed(&format!("ChatGPT 启动任务失败：{error}"), json!({})),
+        }
+    }
+    #[cfg(not(windows))]
+    {
+        failed("此入口仅支持 Windows ChatGPT 桌面版。", json!({}))
+    }
+}
+
+#[cfg(windows)]
+fn launch_installed_chatgpt_windows() -> anyhow::Result<String> {
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    const SCRIPT: &str = r#"
+$ErrorActionPreference = 'Stop'
+# Only accept the genuine OpenAI published package family.
+$families = @('OpenAI.ChatGPT-Desktop_2p2nqsd0c76g0!', 'OpenAI.ChatGPT_2p2nqsd0c76g0!')
+$apps = @(Get-StartApps | Where-Object {
+  $id = $_.AppID
+  $id -and @($families | Where-Object { $id.StartsWith($_, [StringComparison]::OrdinalIgnoreCase) }).Count -gt 0
+})
+if ($apps.Count -gt 0) {
+  Start-Process -FilePath explorer.exe -ArgumentList ('shell:AppsFolder\' + $apps[0].AppID) -ErrorAction Stop
+  Write-Output '已向 Windows 请求启动 ChatGPT 桌面版（不代表已确认窗口启动成功）。'
+  exit 0
+}
+# Non-Store installation: accept only the expected ChatGPT.exe filename in
+# common local application folders, not an arbitrary executable from PATH.
+$localApp = [Environment]::GetFolderPath('LocalApplicationData')
+$paths = @(
+  (Join-Path $localApp 'Programs\ChatGPT\ChatGPT.exe'),
+  (Join-Path $localApp 'Programs\OpenAI\ChatGPT\ChatGPT.exe'),
+  (Join-Path $localApp 'OpenAI\ChatGPT\ChatGPT.exe')
+)
+foreach ($path in $paths) {
+  if (Test-Path -LiteralPath $path -PathType Leaf) {
+    Start-Process -FilePath $path -ErrorAction Stop
+    Write-Output '已向 Windows 请求启动 ChatGPT 桌面版（不代表已确认窗口启动成功）。'
+    exit 0
+  }
+}
+Write-Error '未识别到当前用户安装的官方 ChatGPT 桌面版。请提供 Get-StartApps / Get-AppxPackage 的包名以补充识别。'
+exit 2
+"#;
+    let output = std::process::Command::new("powershell.exe")
+        .args(["-NoProfile", "-NonInteractive", "-Command", SCRIPT])
+        .creation_flags(CREATE_NO_WINDOW)
+        .output()?;
+    if !output.status.success() {
+        anyhow::bail!("{}", String::from_utf8_lossy(&output.stderr).trim());
+    }
+    Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+}
+
 #[tauri::command]
 pub fn open_external_url(url: String) -> CommandResult<Value> {
     let trimmed = url.trim();

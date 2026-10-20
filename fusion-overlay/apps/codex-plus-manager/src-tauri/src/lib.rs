@@ -137,6 +137,7 @@ pub fn run() {
             commands::stop_codex_multi_instance,
             commands::restart_codex_multi_instance,
             commands::restart_codex_plus,
+            commands::launch_installed_chatgpt,
             commands::load_settings,
             commands::dictation_local_model_status,
             commands::download_dictation_local_model,
