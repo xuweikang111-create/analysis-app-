@@ -8239,6 +8239,8 @@ function MaintenanceScreen({
               onChange={(event) => onLaunchFormChange({ ...launchForm, appPath: event.currentTarget.value })}
               placeholder={savedCodexAppPath || t("例如 C:\\Program Files\\WindowsApps\\OpenAI.Codex...\\app")}
             />
+            <p className="field-hint">{t("注意：ChatGPT（GPT）桌面版和 Codex 桌面版是不同的应用。这里需要选择 Codex.exe 或 OpenAI.Codex 的 app 目录，不能填写 ChatGPT.exe。若只安装了 ChatGPT，请先安装 Codex Desktop。")}</p>
+            
           </Field>
           <div className="form-row">
             <Field label={t("Debug 端口")}>
