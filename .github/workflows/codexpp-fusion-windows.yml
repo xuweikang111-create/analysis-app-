@@ -41,6 +41,8 @@ jobs:
         run: |
           $paths = @(
             'crates/codex-plus-core/src/ccs_import.rs',
+            'crates/codex-plus-core/src/app_paths.rs',
+            'crates/codex-plus-core/src/ads.rs',
             'crates/codex-plus-core/src/global_dictation.rs',
             'apps/codex-plus-manager/src-tauri/src/commands.rs',
             'apps/codex-plus-manager/src-tauri/src/lib.rs',
@@ -107,7 +109,7 @@ jobs:
           if (!(Test-Path $nsis)) { throw 'makensis.exe not found' }
           Push-Location scripts/installer/windows
           try {
-            & $nsis /INPUTCHARSET UTF8 /DVERSION=1.10.0-fusion.3 CodexPlusPlus.nsi
+            & $nsis /INPUTCHARSET UTF8 /DVERSION=1.10.0-fusion.4 CodexPlusPlus.nsi
             if ($LASTEXITCODE -ne 0) { throw 'NSIS installer compilation failed' }
           } finally { Pop-Location }
 
