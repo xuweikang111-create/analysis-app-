@@ -1,0 +1,133 @@
+name: CodexPP Fusion Windows (Original UI)
+on:
+  push:
+    branches:
+      - codexpp-fusion-build-20261020
+    paths:
+      - fusion-overlay/**
+      - .github/workflows/codexpp-fusion-windows.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-fusion:
+    runs-on: windows-2022
+    timeout-minutes: 180
+    steps:
+      - name: Checkout Fusion overlay
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Set up stable Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Clone official Codex++ source at pinned commit
+        shell: pwsh
+        run: |
+          git clone --filter=blob:none https://github.com/BigPizzaV3/CodexPlusPlus.git upstream
+          if ($LASTEXITCODE -ne 0) { throw 'Unable to clone Codex++' }
+          git -C upstream checkout --detach 810a822342080175140eae9b908e924627a6aad6
+          if ($LASTEXITCODE -ne 0) { throw 'Unable to checkout pinned upstream commit' }
+          Write-Host ('UPSTREAM=' + (git -C upstream rev-parse HEAD))
+
+      - name: Overlay modified original source files
+        shell: pwsh
+        run: |
+          $paths = @(
+            'crates/codex-plus-core/src/ccs_import.rs',
+            'apps/codex-plus-manager/src-tauri/src/commands.rs',
+            'apps/codex-plus-manager/src-tauri/src/lib.rs',
+            'apps/codex-plus-manager/src/App.tsx'
+          )
+          foreach ($relative in $paths) {
+            $source = Join-Path 'fusion-overlay' $relative
+            $target = Join-Path 'upstream' $relative
+            if (!(Test-Path $source) -or !(Test-Path $target)) { throw "Missing Fusion overlay path: $relative" }
+            Copy-Item -LiteralPath $source -Destination $target -Force
+          }
+          git -C upstream diff --stat
+          $core = Get-Content upstream/crates/codex-plus-core/src/ccs_import.rs -Raw
+          $manager = Get-Content upstream/apps/codex-plus-manager/src/App.tsx -Raw
+          if (!$core.Contains('fusion_sync_linked_ccs') -or !$manager.Contains('fusionSyncCcsProviders')) {
+            throw 'Fusion code missing after overlay'
+          }
+
+      - name: npm install and compile original Tauri/React UI
+        shell: pwsh
+        working-directory: upstream/apps/codex-plus-manager
+        run: |
+          npm ci --no-audit --no-fund
+          if ($LASTEXITCODE -ne 0) { throw 'npm ci failed' }
+          npm run vite:build
+          if ($LASTEXITCODE -ne 0) { throw 'Original UI failed to compile' }
+
+      - name: Rust CC-Switch fusion regression test
+        shell: pwsh
+        working-directory: upstream
+        run: |
+          cargo test -p codex-plus-core fusion_ccs_sync_tests -- --nocapture
+          if ($LASTEXITCODE -ne 0) { throw 'Fusion regression tests failed' }
+
+      - name: Compile real Windows Codex++ GUI executable
+        shell: pwsh
+        working-directory: upstream
+        run: |
+          cargo build --release
+          if ($LASTEXITCODE -ne 0) { throw 'Rust release compilation failed' }
+          New-Item -ItemType Directory -Force dist/windows/app | Out-Null
+          Copy-Item target/release/codex-plus-plus.exe dist/windows/app/codex-plus-plus.exe -Force
+          if (!(Test-Path dist/windows/app/codex-plus-plus.exe)) { throw 'Expected GUI executable missing' }
+          Get-FileHash dist/windows/app/codex-plus-plus.exe -Algorithm SHA256 | Format-List
+
+      - name: Prepare portable ZIP
+        shell: pwsh
+        working-directory: upstream
+        run: |
+          Compress-Archive -Path dist/windows/app/* -DestinationPath dist/windows/CodexPP-Fusion-1.10.0-windows-x64-portable.zip -Force
+
+      - name: Install NSIS
+        shell: pwsh
+        run: |
+          choco install nsis -y --no-progress
+          if ($LASTEXITCODE -ne 0) { throw 'NSIS installation failed' }
+
+      - name: Build Windows installer with original assets
+        shell: pwsh
+        working-directory: upstream
+        run: |
+          $nsis = "${env:ProgramFiles(x86)}\NSIS\makensis.exe"
+          if (!(Test-Path $nsis)) { $nsis = "$env:ProgramFiles\NSIS\makensis.exe" }
+          if (!(Test-Path $nsis)) { throw 'makensis.exe not found' }
+          Push-Location scripts/installer/windows
+          try {
+            & $nsis /INPUTCHARSET UTF8 /DVERSION=1.10.0-fusion.3 CodexPlusPlus.nsi
+            if ($LASTEXITCODE -ne 0) { throw 'NSIS installer compilation failed' }
+          } finally { Pop-Location }
+
+      - name: Upload compiled program and installer
+        uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: CodexPP-Fusion-Windows-x64
+          if-no-files-found: error
+          retention-days: 15
+          path: |
+            upstream/dist/windows/*.exe
+            upstream/dist/windows/*.zip
+            upstream/dist/windows/app/codex-plus-plus.exe
+
+      - name: Upload compilation logs on failure
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: CodexPP-Fusion-build-diagnostics
+          if-no-files-found: ignore
+          path: |
+            upstream/target/release/build/**/stderr
+            upstream/target/release/build/**/output
