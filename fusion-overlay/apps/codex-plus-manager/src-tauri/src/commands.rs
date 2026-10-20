@@ -6218,48 +6218,91 @@ pub async fn launch_installed_chatgpt() -> CommandResult<Value> {
 }
 
 #[cfg(windows)]
+fn encode_chatgpt_powershell_script(script: &str) -> String {
+    // PowerShell's -EncodedCommand expects base64 UTF-16LE. This prevents
+    // multiline script text from being misinterpreted by Windows argv parsing.
+    const SYMBOLS: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut bytes = Vec::with_capacity(script.len() * 2);
+    for codepoint in script.encode_utf16() {
+        bytes.extend_from_slice(&codepoint.to_le_bytes());
+    }
+    let mut encoded = String::with_capacity(bytes.len().div_ceil(3) * 4);
+    for block in bytes.chunks(3) {
+        let a = block[0];
+        let b = *block.get(1).unwrap_or(&0);
+        let c = *block.get(2).unwrap_or(&0);
+        encoded.push(SYMBOLS[(a >> 2) as usize] as char);
+        encoded.push(SYMBOLS[(((a & 3) << 4) | (b >> 4)) as usize] as char);
+        encoded.push(if block.len() > 1 { SYMBOLS[(((b & 15) << 2) | (c >> 6)) as usize] as char } else { '=' });
+        encoded.push(if block.len() > 2 { SYMBOLS[(c & 63) as usize] as char } else { '=' });
+    }
+    encoded
+}
+
+#[cfg(windows)]
 fn launch_installed_chatgpt_windows() -> anyhow::Result<String> {
     use std::os::windows::process::CommandExt;
+    use std::process::Stdio;
     const CREATE_NO_WINDOW: u32 = 0x0800_0000;
     const SCRIPT: &str = r#"
 $ErrorActionPreference = 'Stop'
-# Only accept the genuine OpenAI published package family.
-$families = @('OpenAI.ChatGPT-Desktop_2p2nqsd0c76g0!', 'OpenAI.ChatGPT_2p2nqsd0c76g0!')
-$apps = @(Get-StartApps | Where-Object {
-  $id = $_.AppID
-  $id -and @($families | Where-Object { $id.StartsWith($_, [StringComparison]::OrdinalIgnoreCase) }).Count -gt 0
-})
-if ($apps.Count -gt 0) {
-  Start-Process -FilePath explorer.exe -ArgumentList ('shell:AppsFolder\' + $apps[0].AppID) -ErrorAction Stop
-  Write-Output '已向 Windows 请求启动 ChatGPT 桌面版（不代表已确认窗口启动成功）。'
-  exit 0
-}
-# Non-Store installation: accept only the expected ChatGPT.exe filename in
-# common local application folders, not an arbitrary executable from PATH.
-$localApp = [Environment]::GetFolderPath('LocalApplicationData')
-$paths = @(
-  (Join-Path $localApp 'Programs\ChatGPT\ChatGPT.exe'),
-  (Join-Path $localApp 'Programs\OpenAI\ChatGPT\ChatGPT.exe'),
-  (Join-Path $localApp 'OpenAI\ChatGPT\ChatGPT.exe')
-)
-foreach ($path in $paths) {
-  if (Test-Path -LiteralPath $path -PathType Leaf) {
-    Start-Process -FilePath $path -ErrorAction Stop
-    Write-Output '已向 Windows 请求启动 ChatGPT 桌面版（不代表已确认窗口启动成功）。'
+try {
+  $families = @('OpenAI.ChatGPT-Desktop_2p2nqsd0c76g0!', 'OpenAI.ChatGPT_2p2nqsd0c76g0!')
+  $apps = @(Get-StartApps | Where-Object {
+    $identifier = [string]$_.AppID
+    $matched = $false
+    foreach ($family in $families) {
+      if ($identifier.StartsWith($family, [StringComparison]::OrdinalIgnoreCase)) {
+        $matched = $true
+        break
+      }
+    }
+    $matched
+  })
+  if ($apps.Count -gt 0) {
+    Start-Process -FilePath explorer.exe -ArgumentList ('shell:AppsFolder\' + $apps[0].AppID)
     exit 0
   }
-}
-Write-Error '未识别到当前用户安装的官方 ChatGPT 桌面版。请提供 Get-StartApps / Get-AppxPackage 的包名以补充识别。'
-exit 2
-"#;
-    let output = std::process::Command::new("powershell.exe")
-        .args(["-NoProfile", "-NonInteractive", "-Command", SCRIPT])
-        .creation_flags(CREATE_NO_WINDOW)
-        .output()?;
-    if !output.status.success() {
-        anyhow::bail!("{}", String::from_utf8_lossy(&output.stderr).trim());
+  $localApp = [Environment]::GetFolderPath('LocalApplicationData')
+  $paths = @(
+    (Join-Path $localApp 'Programs\ChatGPT\ChatGPT.exe'),
+    (Join-Path $localApp 'Programs\OpenAI\ChatGPT\ChatGPT.exe'),
+    (Join-Path $localApp 'OpenAI\ChatGPT\ChatGPT.exe')
+  )
+  foreach ($path in $paths) {
+    if (Test-Path -LiteralPath $path -PathType Leaf) {
+      Start-Process -FilePath $path
+      exit 0
     }
-    Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+  }
+  exit 2
+} catch {
+  exit 3
+}
+"#;
+    let encoded = encode_chatgpt_powershell_script(SCRIPT);
+    let exit_status = std::process::Command::new("powershell.exe")
+        .args(["-NoLogo", "-NoProfile", "-NonInteractive", "-EncodedCommand", encoded.as_str()])
+        .creation_flags(CREATE_NO_WINDOW)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()?;
+    match exit_status.code() {
+        Some(0) => Ok("Windows 已收到启动 ChatGPT 的请求，请检查是否出现窗口。".to_string()),
+        Some(2) => anyhow::bail!("当前用户的 Windows 应用列表中找不到官方 ChatGPT 桌面应用。请检查开始菜单中的 ChatGPT 是否能打开。"),
+        Some(code) => anyhow::bail!("启动 ChatGPT 失败（Windows 任务代码 {code}）。请检查开始菜单或桌面快捷方式。"),
+        None => anyhow::bail!("启动 ChatGPT 进程异常终止。"),
+    }
+}
+
+#[cfg(all(test, windows))]
+mod fusion_chatgpt_launcher_tests {
+    #[test]
+    fn encoded_script_is_utf16le_base64() {
+        assert_eq!(super::encode_chatgpt_powershell_script("abc"), "YQBiAGMA");
+        assert_eq!(super::encode_chatgpt_powershell_script(""), "");
+    }
 }
 
 #[tauri::command]
