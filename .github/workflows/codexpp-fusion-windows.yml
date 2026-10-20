@@ -70,12 +70,16 @@ jobs:
           npm run vite:build
           if ($LASTEXITCODE -ne 0) { throw 'Original UI failed to compile' }
 
-      - name: Rust CC-Switch fusion regression test
+      - name: Rust Fusion, ChatGPT discovery and recommendation regression tests
         shell: pwsh
         working-directory: upstream
         run: |
           cargo test -p codex-plus-core fusion_ccs_sync_tests -- --nocapture
-          if ($LASTEXITCODE -ne 0) { throw 'Fusion regression tests failed' }
+          if ($LASTEXITCODE -ne 0) { throw 'CC-Switch fusion regression tests failed' }
+          cargo test -p codex-plus-core windows_app_path_output_tests -- --nocapture
+          if ($LASTEXITCODE -ne 0) { throw 'Windows app path parser regression tests failed' }
+          cargo test -p codex-plus-core ads::tests -- --nocapture
+          if ($LASTEXITCODE -ne 0) { throw 'Recommendation override regression tests failed' }
 
       - name: Compile real Windows Codex++ GUI executable
         shell: pwsh
@@ -109,7 +113,7 @@ jobs:
           if (!(Test-Path $nsis)) { throw 'makensis.exe not found' }
           Push-Location scripts/installer/windows
           try {
-            & $nsis /INPUTCHARSET UTF8 /DVERSION=1.10.0-fusion.4 CodexPlusPlus.nsi
+            & $nsis /INPUTCHARSET UTF8 /DVERSION=1.10.0-fusion.5 CodexPlusPlus.nsi
             if ($LASTEXITCODE -ne 0) { throw 'NSIS installer compilation failed' }
           } finally { Pop-Location }
 

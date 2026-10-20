@@ -67,20 +67,6 @@ fn is_jojo_code_ad(ad: &Value) -> bool {
         || url.contains("jojocode")
 }
 
-/// 一条广告是否可用（类型、标题、描述、URL 齐全）。
-fn is_usable_ad(ad: &Value) -> bool {
-    let ad_type = ad.get("type").and_then(Value::as_str);
-    let field = |key: &str| {
-        ad.get(key)
-            .and_then(Value::as_str)
-            .is_some_and(|value| !value.trim().is_empty())
-    };
-    matches!(ad_type, Some("sponsor" | "normal"))
-        && field("title")
-        && field("description")
-        && field("url")
-}
-
 fn fill_known_remote_logos(ads: &mut [Value]) {
     for ad in ads {
         let Some(object) = ad.as_object_mut() else {
