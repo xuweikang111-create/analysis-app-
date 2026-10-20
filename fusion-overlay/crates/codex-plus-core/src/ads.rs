@@ -221,61 +221,17 @@ mod tests {
     }
 
     #[test]
-    fn top_ad_is_kept_out_of_the_recommendation_pool() {
-        let normalized = normalize_ad_payload(json!({
-            "version": 1,
-            "ads": [sponsored("pool-a")],
-            "top_ad": sponsored("premium"),
-        }));
-
-        // 贵价置顶位有自己的字段，不能混进 ads 数组参与排序。
-        assert_eq!(normalized["topAd"]["id"], json!("premium"));
-        let pool = normalized["ads"].as_array().unwrap();
-        assert!(
-            !pool.iter().any(|ad| ad["id"] == json!("premium")),
-            "置顶位不应出现在推荐池里"
-        );
-    }
-
-    #[test]
-    fn top_ad_accepts_camel_case() {
-        let camel = normalize_ad_payload(json!({
-            "version": 1,
-            "ads": [],
-            "topAd": sponsored("premium"),
-        }));
-        assert_eq!(camel["topAd"]["id"], json!("premium"));
-    }
-
-    #[test]
-    fn top_ad_accepts_multiple_usable_ads_for_rotation() {
-        let normalized = normalize_ad_payload(json!({
-            "version": 1,
-            "ads": [],
-            "top_ad": [
-                sponsored("premium-a"),
-                { "type": "sponsor", "title": "残缺", "description": "描述" },
-                sponsored("premium-b"),
-            ],
-        }));
-
-        assert_eq!(normalized["topAd"]["id"], json!("premium-a"));
-        assert_eq!(normalized["topAds"].as_array().unwrap().len(), 2);
-        assert_eq!(normalized["topAds"][1]["id"], json!("premium-b"));
-    }
-
-    #[test]
-    fn missing_or_unusable_top_ad_is_omitted() {
+    fn mozhe_top_ad_is_stable_when_remote_top_ad_is_missing_or_changes() {
         for payload in [
             json!({ "version": 1, "ads": [] }),
-            json!({
-                "version": 1,
-                "ads": [],
-                "top_ad": { "type": "sponsor", "title": "残缺", "description": "描述" },
-            }),
+            json!({ "version": 1, "ads": [], "topAd": sponsored("remote-a") }),
+            json!({ "version": 1, "ads": [], "top_ad": [sponsored("remote-b"), sponsored("remote-c")] }),
         ] {
             let normalized = normalize_ad_payload(payload);
-            assert!(normalized.get("topAd").is_none());
+            assert_eq!(normalized["topAd"]["id"], json!("mozhe-world-relay"));
+            assert_eq!(normalized["topAd"]["url"], json!("https://ai.mozhe.world/"));
+            assert_eq!(normalized["topAds"].as_array().unwrap().len(), 1);
         }
     }
+
 }
