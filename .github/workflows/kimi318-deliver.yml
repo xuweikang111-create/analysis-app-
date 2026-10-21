@@ -1,0 +1,45 @@
+name: Package direct MOZHE Kimi 3.2.18 deliverable
+
+on:
+  push:
+    branches:
+      - kimi318-deliver
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download successful build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: MOZHE_KimiWork_Mac_AppleSilicon_3.2.18_COMPAT_v1.0.13
+          path: source
+          github-token: ${{ github.token }}
+          repository: xuweikang111-create/analysis-app-
+          run-id: 39598867814
+
+      - name: Expand direct plugin package
+        shell: bash
+        run: |
+          set -euo pipefail
+          ls -lah source
+          INNER="source/MOZHE_KimiWork_Mac_AppleSilicon_3.2.18_COMPAT_v1.0.13.zip"
+          test -f "$INNER"
+          mkdir -p expanded
+          unzip -q "$INNER" -d expanded
+          test -d expanded/MOZHE_KimiWork_Mac_AppleSilicon_3.2.18_COMPAT_v1.0.13
+          test -f expanded/MOZHE_KimiWork_Mac_AppleSilicon_3.2.18_COMPAT_v1.0.13/install.command
+          test -f expanded/MOZHE_KimiWork_Mac_AppleSilicon_3.2.18_COMPAT_v1.0.13/payload/app.asar
+          find expanded/MOZHE_KimiWork_Mac_AppleSilicon_3.2.18_COMPAT_v1.0.13 -maxdepth 2 -type f -print
+          sha256sum "$INNER" > expanded/INNER_ZIP_SHA256.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MOZHE_KimiWork_Mac_AppleSilicon_3.2.18_COMPAT_v1.0.13_DIRECT
+          path: expanded/MOZHE_KimiWork_Mac_AppleSilicon_3.2.18_COMPAT_v1.0.13/
+          retention-days: 14
