@@ -75,15 +75,19 @@ source += '\n\n/* MOZHE_KIMI_3218_RELAY_V1013 */\n' +
   'function __mozheMacBase(_0xFallback) {\n' +
   '  const _0xRaw = (process.env.KWORK_MODEL_RELAY_BASE || "").trim();\n' +
   '  if (!_0xRaw) return _0xFallback;\n' +
-  '  if (!/^http:\\/\\/127\\.0\\.0\\.1:\\\\d{1,5}\\/v1\\/?$/.test(_0xRaw)) {\n' +
+  '  let _0xParsed;\n' +
+  '  try { _0xParsed = new URL(_0xRaw); } catch {\n' +
+  '    throw new Error("[MOZHE] invalid KWORK_MODEL_RELAY_BASE");\n' +
+  '  }\n' +
+  '  let _0xPath = _0xParsed.pathname;\n' +
+  '  while (_0xPath.length > 1 && _0xPath.endsWith("/")) _0xPath = _0xPath.slice(0, -1);\n' +
+  '  const _0xPort = Number(_0xParsed.port);\n' +
+  '  if (_0xParsed.protocol !== "http:" || _0xParsed.hostname !== "127.0.0.1" ||\n' +
+  '      _0xPath !== "/v1" || _0xParsed.search || _0xParsed.hash ||\n' +
+  '      !Number.isInteger(_0xPort) || _0xPort < 1 || _0xPort > 65535) {\n' +
   '    throw new Error("[MOZHE] KWORK_MODEL_RELAY_BASE must be http://127.0.0.1:<port>/v1");\n' +
   '  }\n' +
-  '  const _0xParsed = new URL(_0xRaw);\n' +
-  '  const _0xPort = Number(_0xParsed.port);\n' +
-  '  if (!Number.isInteger(_0xPort) || _0xPort < 1 || _0xPort > 65535) {\n' +
-  '    throw new Error("[MOZHE] invalid relay port");\n' +
-  '  }\n' +
-  '  const _0xBase = _0xRaw.replace(/\\/+$/, "");\n' +
+  '  const _0xBase = "http://127.0.0.1:" + _0xPort + "/v1";\n' +
   '  process.env.KWORK_MODEL_RELAY_ACTIVE = "1";\n' +
   '  process.env.KWORK_MODEL_RELAY_EFFECTIVE = _0xBase;\n' +
   '  return _0xBase;\n' +
@@ -144,7 +148,8 @@ if (JSON.stringify(packedBefore) !== JSON.stringify(packedAfter)) {
 
 let checked = 0;
 for (const item of packedBefore) {
-  const rel = item.slice(item.indexOf(':') + 1).trim().replace(/^\\/+/, '');
+  let rel = item.slice(item.indexOf(':') + 1).trim();
+  while (rel.startsWith('/')) rel = rel.slice(1);
   if (!rel || rel === MAIN_PATH) continue;
   const entry = asar.statFile(sourceAsar, rel, false);
   if (entry.files || entry.link) continue;
