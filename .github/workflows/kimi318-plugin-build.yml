@@ -1,0 +1,189 @@
+name: Build MOZHE Kimi 3.2.18 plugin
+
+on:
+  push:
+    branches:
+      - kimi318-plugin-build
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-14
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.12.0'
+
+      - name: Install ASAR builder
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm init -y >/dev/null 2>&1
+          npm install --no-save @electron/asar@latest
+
+      - name: Download and validate official Kimi 3.2.18
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p work
+          curl -fL --retry 3 --retry-delay 2             -o work/kimi_3.2.18.dmg             https://kimi-img.moonshot.cn/app/download/mac/kimi_3.2.18.dmg
+
+          GOT="$(shasum -a 256 work/kimi_3.2.18.dmg | awk '{print $1}')"
+          EXPECTED="c445530633814332df9542195ba5b08ded6647e55df6f588355f3d080783861b"
+          echo "DMG_SHA256=$GOT"
+          [ "$GOT" = "$EXPECTED" ]
+
+      - name: Mount Kimi and build patched ASAR
+        shell: bash
+        run: |
+          set -euo pipefail
+          MOUNT_DIR="$(mktemp -d /tmp/kimi318build.XXXXXX)"
+          echo "$MOUNT_DIR" > work/mount-dir.txt
+          hdiutil attach -nobrowse -readonly -mountpoint "$MOUNT_DIR" work/kimi_3.2.18.dmg
+
+          APP_ASAR="$(find "$MOUNT_DIR" -type f -path '*/Kimi.app/Contents/Resources/app.asar' -print -quit)"
+          [ -n "$APP_ASAR" ]
+          APP_DIR="$(dirname "$(dirname "$(dirname "$APP_ASAR")")")"
+          echo "$APP_DIR" > work/app-dir.txt
+
+          VER="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP_DIR/Contents/Info.plist")"
+          BUILD="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$APP_DIR/Contents/Info.plist")"
+          ELECTRON="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$APP_DIR/Contents/Frameworks/Electron Framework.framework/Versions/A/Resources/Info.plist")"
+          echo "KIMI_VERSION=$VER"
+          echo "KIMI_BUILD=$BUILD"
+          echo "ELECTRON=$ELECTRON"
+          [ "$VER" = "3.2.18" ]
+          [ "$BUILD" = "3.2.18.6" ]
+          [ "$ELECTRON" = "43.7.3" ]
+
+          ORIG_ASAR_SHA="$(shasum -a 256 "$APP_ASAR" | awk '{print $1}')"
+          echo "ORIGINAL_ASAR_SHA=$ORIG_ASAR_SHA"
+          [ "$ORIG_ASAR_SHA" = "6eb027db9d23b1c7f5246c1cc8f15bd92340febb422bc09e5d7309449469d6d0" ]
+
+          mkdir -p work/patched
+          node kimi-3.2.18-plugin/build_patch.mjs             "$APP_ASAR"             work/patched/app.asar             work/patched-main.js | tee work/build-report.txt
+
+          node --check work/patched-main.js
+
+          cp "$APP_DIR/Contents/Info.plist" work/original-Info.plist
+          python3 kimi-3.2.18-plugin/make_info.py             work/original-Info.plist             work/patched/Info.plist             work/patched/app.asar | tee work/info-report.txt
+
+          plutil -lint work/patched/Info.plist
+
+      - name: Validate rebuilt ASAR and Electron integrity
+        shell: bash
+        run: |
+          set -euo pipefail
+          PATCHED_ASAR_SHA="$(shasum -a 256 work/patched/app.asar | awk '{print $1}')"
+          echo "PATCHED_ASAR_SHA=$PATCHED_ASAR_SHA"
+
+          PLIST_HASH="$(python3 - <<'PY'
+          import plistlib
+          with open('work/patched/Info.plist','rb') as f:
+              p=plistlib.load(f)
+          print(p['ElectronAsarIntegrity']['Resources/app.asar']['hash'])
+          PY
+          )"
+          echo "PLIST_ASAR_HASH=$PLIST_HASH"
+          [ "$PATCHED_ASAR_SHA" = "$PLIST_HASH" ]
+
+          node - <<'NODE'
+          import * as asar from '@electron/asar';
+          import crypto from 'node:crypto';
+          const b=asar.extractFile('work/patched/app.asar','out/main/index.js');
+          const s=b.toString('utf8');
+          const h=crypto.createHash('sha256').update(b).digest('hex');
+          console.log('PATCHED_MAIN_SHA='+h);
+          if (!s.includes('MOZHE_KIMI_3218_RELAY_V1013')) throw new Error('marker missing');
+          if (!s.includes('function __mozheMacBase(')) throw new Error('relay helper missing');
+          if (!s.includes('return __mozheMacBase(this.#opts[_0x5ab4de(7084)]')) throw new Error('gateway resolver patch missing');
+          if (!s.includes('baseUrl: __mozheMacBase(_0x34f147 && _0x34f147.baseUrl)')) throw new Error('credential writer patch missing');
+          NODE
+
+      - name: Test signing on a disposable Kimi.app copy
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP_DIR="$(cat work/app-dir.txt)"
+          echo "Copying Kimi.app for signing test..."
+          ditto "$APP_DIR" work/Kimi-Test.app
+
+          cp work/patched/app.asar work/Kimi-Test.app/Contents/Resources/app.asar
+          cp work/patched/Info.plist work/Kimi-Test.app/Contents/Info.plist
+
+          xattr -dr com.apple.quarantine work/Kimi-Test.app >/dev/null 2>&1 || true
+          codesign --force --sign -             --preserve-metadata=identifier,entitlements,requirements,flags             work/Kimi-Test.app
+
+          codesign --verify --deep --strict work/Kimi-Test.app
+          echo "CODESIGN_VERIFY=OK"
+
+      - name: Assemble plugin ZIP
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist/MOZHE_KimiWork_Mac_AppleSilicon_3.2.18_COMPAT_v1.0.13/payload
+          ROOT="dist/MOZHE_KimiWork_Mac_AppleSilicon_3.2.18_COMPAT_v1.0.13"
+
+          cp work/patched/app.asar "$ROOT/payload/app.asar"
+          cp work/patched/Info.plist "$ROOT/payload/Info.plist"
+
+          cp kimi-3.2.18-plugin/install.command "$ROOT/install.command"
+          cp kimi-3.2.18-plugin/uninstall.command "$ROOT/uninstall.command"
+          cp kimi-3.2.18-plugin/configure-relay.command "$ROOT/configure-relay.command"
+          cp kimi-3.2.18-plugin/launch-with-relay.command "$ROOT/launch-with-relay.command"
+          cp kimi-3.2.18-plugin/diagnose.command "$ROOT/diagnose.command"
+          cp kimi-3.2.18-plugin/README.txt "$ROOT/README.txt"
+
+          PATCHED_ASAR_SHA="$(shasum -a 256 work/patched/app.asar | awk '{print $1}')"
+          sed -i '' "s/__PATCHED_ASAR_SHA__/$PATCHED_ASAR_SHA/g" "$ROOT/install.command"
+
+          chmod +x "$ROOT/"*.command
+
+          cat > "$ROOT/manifest.txt" <<EOF
+MOZHE Kimi Work 3.2.18 compatibility plugin v1.0.13
+KimiVersion=3.2.18
+KimiBuild=3.2.18.6
+Electron=43.7.3
+OfficialDmgSha256=c445530633814332df9542195ba5b08ded6647e55df6f588355f3d080783861b
+OfficialAppAsarSha256=6eb027db9d23b1c7f5246c1cc8f15bd92340febb422bc09e5d7309449469d6d0
+OfficialMainSha256=4b20660fdc04d6c9de50bf252ccadb3fb9502f5be3065126529a83dcd5f98408
+PatchedAppAsarSha256=$PATCHED_ASAR_SHA
+EOF
+
+          bash -n "$ROOT/install.command"
+          bash -n "$ROOT/uninstall.command"
+          bash -n "$ROOT/configure-relay.command"
+          bash -n "$ROOT/launch-with-relay.command"
+          bash -n "$ROOT/diagnose.command"
+
+          (
+            cd dist
+            ditto -c -k --sequesterRsrc --keepParent               MOZHE_KimiWork_Mac_AppleSilicon_3.2.18_COMPAT_v1.0.13               MOZHE_KimiWork_Mac_AppleSilicon_3.2.18_COMPAT_v1.0.13.zip
+          )
+
+          shasum -a 256 dist/MOZHE_KimiWork_Mac_AppleSilicon_3.2.18_COMPAT_v1.0.13.zip             | tee dist/ZIP_SHA256.txt
+
+      - name: Detach DMG
+        if: always()
+        shell: bash
+        run: |
+          if [ -f work/mount-dir.txt ]; then
+            MOUNT_DIR="$(cat work/mount-dir.txt)"
+            hdiutil detach "$MOUNT_DIR" -force >/dev/null 2>&1 || true
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MOZHE_KimiWork_Mac_AppleSilicon_3.2.18_COMPAT_v1.0.13
+          path: |
+            dist/MOZHE_KimiWork_Mac_AppleSilicon_3.2.18_COMPAT_v1.0.13.zip
+            dist/ZIP_SHA256.txt
+            work/build-report.txt
+            work/info-report.txt
+          retention-days: 14
