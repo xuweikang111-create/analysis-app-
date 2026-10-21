@@ -28,7 +28,7 @@ jobs:
         run: |
           set -euo pipefail
           ls -lah source
-          INNER="source/MOZHE_KimiWork_Mac_AppleSilicon_3.2.18_COMPAT_v1.0.13.zip"
+          INNER="source/dist/MOZHE_KimiWork_Mac_AppleSilicon_3.2.18_COMPAT_v1.0.13.zip"
           test -f "$INNER"
           mkdir -p expanded
           unzip -q "$INNER" -d expanded
