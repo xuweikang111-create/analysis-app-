@@ -46,7 +46,13 @@ jobs:
           shasum -a 256 work/app.asar | tee report/app-asar-sha.txt
           hdiutil detach "$MOUNT_DIR" -force
 
-          npx --yes @electron/asar@3.2.10 extract work/app.asar extracted/app
+          npm install --no-save @electron/asar@3.2.10
+          mkdir -p extracted/app/out/main
+          node - <<'NODE'
+          const fs = require('fs');
+          const asar = require('@electron/asar');
+          fs.writeFileSync('extracted/app/out/main/index.js', asar.extractFile('work/app.asar', 'out/main/index.js'));
+          NODE
           MAIN=extracted/app/out/main/index.js
           test -f "$MAIN"
           shasum -a 256 "$MAIN" | tee report/main-sha.txt
