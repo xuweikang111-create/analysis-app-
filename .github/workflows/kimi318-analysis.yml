@@ -59,8 +59,16 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          npx --yes @electron/asar@3.2.10 extract work/app-3.2.17.asar extracted/3.2.17
-          npx --yes @electron/asar@3.2.10 extract work/app-3.2.18.asar extracted/3.2.18
+          npm install --no-save @electron/asar@3.2.10
+          mkdir -p extracted/3.2.17/out/main extracted/3.2.18/out/main
+          node - <<'NODE'
+          const fs = require('fs');
+          const asar = require('@electron/asar');
+          for (const v of ['3.2.17','3.2.18']) {
+            const data = asar.extractFile('work/app-' + v + '.asar', 'out/main/index.js');
+            fs.writeFileSync('extracted/' + v + '/out/main/index.js', data);
+          }
+          NODE
           test -f extracted/3.2.17/out/main/index.js
           test -f extracted/3.2.18/out/main/index.js
           shasum -a 256 extracted/3.2.17/out/main/index.js | tee report/main-sha-3.2.17.txt
