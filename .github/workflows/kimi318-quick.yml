@@ -1,0 +1,89 @@
+name: Kimi 3.2.18 quick probe
+
+on:
+  push:
+    branches:
+      - kimi318-quick
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: macos-14
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Download and inspect Kimi 3.2.18
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p work extracted report
+          curl -fL --connect-timeout 20 --max-time 360 --retry 3 --retry-delay 2 \
+            -o work/kimi_3.2.18.dmg \
+            https://kimi-img.moonshot.cn/app/download/mac/kimi_3.2.18.dmg
+          shasum -a 256 work/kimi_3.2.18.dmg | tee report/dmg-sha.txt
+
+          MOUNT_DIR="$(mktemp -d /tmp/kimi318.XXXXXX)"
+          hdiutil attach -nobrowse -readonly -mountpoint "$MOUNT_DIR" work/kimi_3.2.18.dmg
+          APP_ASAR="$(find "$MOUNT_DIR" -type f -path '*/Kimi.app/Contents/Resources/app.asar' -print -quit)"
+          test -n "$APP_ASAR"
+          APP_DIR="$(dirname "$(dirname "$(dirname "$APP_ASAR")")")"
+
+          echo "KIMI_APP=$APP_DIR"
+          /usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP_DIR/Contents/Info.plist" | tee report/app-version.txt
+          /usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$APP_DIR/Contents/Info.plist" | tee report/app-build.txt
+          ELECTRON_PLIST="$APP_DIR/Contents/Frameworks/Electron Framework.framework/Versions/A/Resources/Info.plist"
+          if [ -f "$ELECTRON_PLIST" ]; then
+            /usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$ELECTRON_PLIST" | tee report/electron-version.txt
+          fi
+          cp "$APP_ASAR" work/app.asar
+          shasum -a 256 work/app.asar | tee report/app-asar-sha.txt
+          hdiutil detach "$MOUNT_DIR" -force
+
+          npx --yes @electron/asar@3.2.10 extract work/app.asar extracted/app
+          MAIN=extracted/app/out/main/index.js
+          test -f "$MAIN"
+          shasum -a 256 "$MAIN" | tee report/main-sha.txt
+          wc -c "$MAIN" | tee report/main-size.txt
+
+          python3 - <<'PY'
+          from pathlib import Path
+          import re, json, hashlib
+          s=Path("extracted/app/out/main/index.js").read_text("utf-8",errors="replace")
+          anchors=[
+            "function _0xa7af7d() {",
+            "async function _0x227e1f() {",
+            "async function _0x77ccf3(_0x2c62cd) {",
+            "return this.#opts[_0x500c30(5016)]?.()?.[_0x500c30(6736)]() || _0x56b828;",
+            "startAgentExtension(app);",
+            "setupAutoUpdater();",
+          ]
+          structural=re.compile(r'return\s+this\.#opts\[[^\]]+\]\?\.\(\)\?\.\[[^\]]+\]\(\)\s*\|\|\s*[^;]+;')
+          out={
+            "sha256":hashlib.sha256(s.encode()).hexdigest(),
+            "bytes":len(s.encode()),
+            "anchors":{a:s.count(a) for a in anchors},
+            "structural_opts_returns":[m.group(0) for m in structural.finditer(s)][:50],
+          }
+          Path("report/quick.json").write_text(json.dumps(out,ensure_ascii=False,indent=2),"utf-8")
+          print("===== QUICK PROBE =====")
+          print("main sha256 =",out["sha256"])
+          print("main bytes =",out["bytes"])
+          for a,c in out["anchors"].items():
+            print("ANCHOR",repr(a),"COUNT",c)
+          print("STRUCTURAL_OPTS_RETURN_COUNT",len(out["structural_opts_returns"]))
+          for x in out["structural_opts_returns"]:
+            print("STRUCTURAL",x)
+          PY
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kimi-3.2.18-quick-probe
+          path: report/
+          retention-days: 7
