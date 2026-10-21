@@ -8,7 +8,7 @@ LOG="$STATE/launcher.log"
 
 [ -d "$APP" ] || { echo "未找到 /Applications/Kimi.app"; exit 1; }
 
-BASE="$KWORK_MODEL_RELAY_BASE"
+BASE="$(printenv KWORK_MODEL_RELAY_BASE 2>/dev/null || true)"
 if [ -z "$BASE" ] && [ -f "$CONF" ]; then
   BASE="$(cat "$CONF")"
 fi
