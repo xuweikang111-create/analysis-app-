@@ -1,0 +1,223 @@
+name: Kimi 3.2.17 vs 3.2.18 analysis
+
+on:
+  push:
+    branches:
+      - kimi318-analysis
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    runs-on: macos-14
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Download official DMGs and extract app.asar
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p work extracted report
+          for v in 3.2.17 3.2.18; do
+            echo "===== DOWNLOAD $v ====="
+            curl -fL --retry 3 --retry-delay 2 -o "work/kimi_$v.dmg" "https://kimi-img.moonshot.cn/app/download/mac/kimi_$v.dmg"
+            shasum -a 256 "work/kimi_$v.dmg" | tee "report/dmg-sha-$v.txt"
+
+            MOUNT_DIR="$(mktemp -d "/tmp/kimi-$v.XXXXXX")"
+            hdiutil attach -nobrowse -readonly -mountpoint "$MOUNT_DIR" "work/kimi_$v.dmg"
+
+            APP_ASAR="$(find "$MOUNT_DIR" -type f -path '*/Kimi.app/Contents/Resources/app.asar' -print -quit)"
+            test -n "$APP_ASAR"
+            APP_DIR="$(dirname "$(dirname "$(dirname "$APP_ASAR")")")"
+            echo "KIMI_APP=$APP_DIR"
+
+            cp "$APP_ASAR" "work/app-$v.asar"
+            APP_VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP_DIR/Contents/Info.plist" 2>/dev/null || true)"
+            APP_BUILD="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$APP_DIR/Contents/Info.plist" 2>/dev/null || true)"
+            ELECTRON_PLIST="$APP_DIR/Contents/Frameworks/Electron Framework.framework/Versions/A/Resources/Info.plist"
+            ELECTRON_VERSION=""
+            if [ -f "$ELECTRON_PLIST" ]; then
+              ELECTRON_VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$ELECTRON_PLIST" 2>/dev/null || true)"
+            fi
+            printf '%s\n' "$APP_VERSION" > "report/app-version-$v.txt"
+            printf '%s\n' "$APP_BUILD" > "report/app-build-$v.txt"
+            printf '%s\n' "$ELECTRON_VERSION" > "report/electron-version-$v.txt"
+            shasum -a 256 "work/app-$v.asar" | tee "report/app-asar-sha-$v.txt"
+
+            hdiutil detach "$MOUNT_DIR" -force
+            rmdir "$MOUNT_DIR" || true
+          done
+
+      - name: Extract ASARs
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx --yes @electron/asar@3.2.10 extract work/app-3.2.17.asar extracted/3.2.17
+          npx --yes @electron/asar@3.2.10 extract work/app-3.2.18.asar extracted/3.2.18
+          test -f extracted/3.2.17/out/main/index.js
+          test -f extracted/3.2.18/out/main/index.js
+          shasum -a 256 extracted/3.2.17/out/main/index.js | tee report/main-sha-3.2.17.txt
+          shasum -a 256 extracted/3.2.18/out/main/index.js | tee report/main-sha-3.2.18.txt
+          wc -c extracted/3.2.17/out/main/index.js extracted/3.2.18/out/main/index.js | tee report/main-sizes.txt
+
+      - name: Analyze known MOZHE 3.2.17 anchors
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib, json, re, difflib
+
+          s17 = Path("extracted/3.2.17/out/main/index.js").read_text("utf-8", errors="replace")
+          s18 = Path("extracted/3.2.18/out/main/index.js").read_text("utf-8", errors="replace")
+
+          anchors = [
+              "function _0xa7af7d() {",
+              "async function _0x227e1f() {",
+              "async function _0x77ccf3(_0x2c62cd) {",
+              "return this.#opts[_0x500c30(5016)]?.()?.[_0x500c30(6736)]() || _0x56b828;",
+              "startAgentExtension(app);",
+              "setupAutoUpdater();",
+          ]
+
+          def sha(x):
+              return hashlib.sha256(x.encode()).hexdigest()
+
+          def norm(x):
+              x = re.sub(r'_0x[0-9a-fA-F]+', 'OBF', x)
+              x = re.sub(r'\b0x[0-9a-fA-F]+\b', 'HEX', x)
+              x = re.sub(r'\b\d+\b', 'NUM', x)
+              return re.sub(r'\s+', ' ', x).strip()
+
+          def ctx(src, needle, radius=650):
+              i = src.find(needle)
+              if i < 0:
+                  return ""
+              return src[max(0,i-radius):min(len(src),i+len(needle)+radius)]
+
+          fn_re = re.compile(r'(?m)(async\s+)?function\s+([A-Za-z_$][\w$]*)\s*\(([^)]*)\)\s*\{')
+
+          def simple_function_slice(src, start):
+              open_brace = src.find("{", start)
+              if open_brace < 0:
+                  return src[start:start+3000]
+              depth = 0
+              i = open_brace
+              quote = None
+              esc = False
+              while i < len(src):
+                  c = src[i]
+                  if quote:
+                      if esc:
+                          esc = False
+                      elif c == "\\":
+                          esc = True
+                      elif c == quote:
+                          quote = None
+                  else:
+                      if c in ("'", '"'):
+                          quote = c
+                      elif c == "{":
+                          depth += 1
+                      elif c == "}":
+                          depth -= 1
+                          if depth == 0:
+                              return src[start:i+1]
+                  i += 1
+              return src[start:start+12000]
+
+          f17 = []
+          for m in fn_re.finditer(s17):
+              text = simple_function_slice(s17, m.start())
+              f17.append((m.group(2), bool(m.group(1)), len([a for a in m.group(3).split(",") if a.strip()]), text))
+          f18 = []
+          for m in fn_re.finditer(s18):
+              text = simple_function_slice(s18, m.start())
+              f18.append((m.group(2), bool(m.group(1)), len([a for a in m.group(3).split(",") if a.strip()]), text))
+
+          old_by_name = {x[0]:x for x in f17}
+          mappings = {}
+          for target in ["_0xa7af7d","_0x227e1f","_0x77ccf3"]:
+              old = old_by_name.get(target)
+              if not old:
+                  mappings[target] = []
+                  continue
+              oldn = norm(old[3])
+              cand = []
+              for name, is_async, argc, text in f18:
+                  if is_async != old[1] or argc != old[2]:
+                      continue
+                  newn = norm(text)
+                  if not oldn or not newn:
+                      continue
+                  lr = len(newn) / max(len(oldn),1)
+                  if lr < 0.45 or lr > 2.2:
+                      continue
+                  score = difflib.SequenceMatcher(None, oldn[:12000], newn[:12000]).ratio()
+                  cand.append((score,name,len(text),text[:180].replace("\n"," ")))
+              cand.sort(reverse=True)
+              mappings[target] = [
+                  {"score":round(a,6),"candidate":b,"length":c,"header":d}
+                  for a,b,c,d in cand[:10]
+              ]
+
+          structural = re.compile(r'return\s+this\.#opts\[[^\]]+\]\?\.\(\)\?\.\[[^\]]+\]\(\)\s*\|\|\s*[^;]+;')
+          structural_matches = [m.group(0) for m in structural.finditer(s18)]
+
+          data = {
+              "main_sha256":{"3.2.17":sha(s17),"3.2.18":sha(s18)},
+              "main_bytes":{"3.2.17":len(s17.encode()),"3.2.18":len(s18.encode())},
+              "function_decl_count":{"3.2.17":len(f17),"3.2.18":len(f18)},
+              "anchors":{a:{
+                  "3.2.17_count":s17.count(a),
+                  "3.2.18_count":s18.count(a),
+                  "3.2.17_context":ctx(s17,a),
+                  "3.2.18_context":ctx(s18,a),
+              } for a in anchors},
+              "fuzzy_mappings":mappings,
+              "3.2.18_structural_opts_return_matches":structural_matches[:50],
+          }
+          Path("report/analysis.json").write_text(json.dumps(data,ensure_ascii=False,indent=2),"utf-8")
+
+          print("===== KIMI MAIN ANALYSIS =====")
+          print("main sha 3.2.17:", data["main_sha256"]["3.2.17"])
+          print("main sha 3.2.18:", data["main_sha256"]["3.2.18"])
+          print("main bytes:", data["main_bytes"])
+          print("function declarations:", data["function_decl_count"])
+          print("===== EXACT ANCHORS =====")
+          for a,d in data["anchors"].items():
+              print(a)
+              print("  3.2.17 count =", d["3.2.17_count"])
+              print("  3.2.18 count =", d["3.2.18_count"])
+          print("===== FUZZY FUNCTION MAPPINGS =====")
+          for old, items in mappings.items():
+              print("OLD", old)
+              for item in items[:5]:
+                  print(" ", item)
+          print("===== STRUCTURAL #opts RETURNS IN 3.2.18 =====")
+          print("count =", len(structural_matches))
+          for x in structural_matches[:20]:
+              print(x)
+          PY
+
+      - name: Create diff
+        shell: bash
+        run: |
+          set +e
+          diff -u extracted/3.2.17/out/main/index.js extracted/3.2.18/out/main/index.js > report/main-3.2.17-vs-3.2.18.diff
+          set -e
+          wc -l report/main-3.2.17-vs-3.2.18.diff || true
+          du -h report/main-3.2.17-vs-3.2.18.diff || true
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kimi-3.2.17-vs-3.2.18-analysis
+          path: report/
+          retention-days: 7
