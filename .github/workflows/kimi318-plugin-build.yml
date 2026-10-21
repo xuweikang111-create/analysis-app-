@@ -145,16 +145,16 @@ jobs:
 
           chmod +x "$ROOT/"*.command
 
-          cat > "$ROOT/manifest.txt" <<EOF
-MOZHE Kimi Work 3.2.18 compatibility plugin v1.0.13
-KimiVersion=3.2.18
-KimiBuild=3.2.18.6
-Electron=43.7.3
-OfficialDmgSha256=c445530633814332df9542195ba5b08ded6647e55df6f588355f3d080783861b
-OfficialAppAsarSha256=6eb027db9d23b1c7f5246c1cc8f15bd92340febb422bc09e5d7309449469d6d0
-OfficialMainSha256=4b20660fdc04d6c9de50bf252ccadb3fb9502f5be3065126529a83dcd5f98408
-PatchedAppAsarSha256=$PATCHED_ASAR_SHA
-EOF
+          printf '%s\\n' \
+            'MOZHE Kimi Work 3.2.18 compatibility plugin v1.0.13' \
+            'KimiVersion=3.2.18' \
+            'KimiBuild=3.2.18.6' \
+            'Electron=43.7.3' \
+            'OfficialDmgSha256=c445530633814332df9542195ba5b08ded6647e55df6f588355f3d080783861b' \
+            'OfficialAppAsarSha256=6eb027db9d23b1c7f5246c1cc8f15bd92340febb422bc09e5d7309449469d6d0' \
+            'OfficialMainSha256=4b20660fdc04d6c9de50bf252ccadb3fb9502f5be3065126529a83dcd5f98408' \
+            "PatchedAppAsarSha256=$PATCHED_ASAR_SHA" \
+            > "$ROOT/manifest.txt"
 
           bash -n "$ROOT/install.command"
           bash -n "$ROOT/uninstall.command"
