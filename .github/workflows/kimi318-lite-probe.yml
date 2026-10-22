@@ -1,0 +1,33 @@
+name: Probe Kimi bundled Node
+
+on:
+  push:
+    branches:
+      - kimi318-lite
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download and inspect
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fL --retry 3 -o /tmp/kimi.dmg https://kimi-img.moonshot.cn/app/download/mac/kimi_3.2.18.dmg
+          M="$(mktemp -d /tmp/kimi-lite.XXXXXX)"
+          hdiutil attach -nobrowse -readonly -mountpoint "$M" /tmp/kimi.dmg
+          APP_ASAR="$(find "$M" -type f -path '*/Kimi.app/Contents/Resources/app.asar' -print -quit)"
+          APP="$(dirname "$(dirname "$(dirname "$APP_ASAR")")")"
+          echo "APP=$APP"
+          find "$APP/Contents/Resources" -type f -name node -perm -111 -maxdepth 8 -print | while read -r N; do
+            echo "NODE_CANDIDATE=$N"
+            "$N" --version || true
+          done
+          echo "RUNTIME TREE:"
+          find "$APP/Contents/Resources" -maxdepth 5 -path '*runtime*' -print | head -100
+          hdiutil detach "$M" -force
